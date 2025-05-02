@@ -1,6 +1,0 @@
-@PTfinder.API_HostAddress = http://localhost:5197
-
-GET {{PTfinder.API_HostAddress}}/weatherforecast/
-Accept: application/json
-
-###
