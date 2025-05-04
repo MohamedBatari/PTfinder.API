@@ -22,7 +22,7 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowReactApp",
         policyBuilder =>
         {
-            policyBuilder.WithOrigins("https://pt-finder-now.vercel.app/")
+            policyBuilder.WithOrigins("https://pt-finder-now.vercel.app")
                    .AllowAnyHeader()
                    .AllowAnyMethod();
         });
@@ -30,7 +30,7 @@ builder.Services.AddCors(options =>
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
-        options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.Preserve;
+        options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
     });
 
 var app = builder.Build();
