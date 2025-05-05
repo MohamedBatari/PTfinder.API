@@ -2,8 +2,12 @@
 using Microsoft.EntityFrameworkCore;
 using PTfinder.API.DATA;
 using Npgsql.EntityFrameworkCore.PostgreSQL;
+using DotNetEnv;
+
 
 var builder = WebApplication.CreateBuilder(args);
+
+Env.Load();
 
 // Database config
 builder.Services.AddDbContext<AppDbContext>(options =>

@@ -6,7 +6,11 @@ using PTfinder.API.DATA;
 using Microsoft.EntityFrameworkCore;
 using System.IO;
 using YourAppNamespace.Models.DTOs;
-
+using Supabase;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace PTfinder.API.Controllers
 {
@@ -15,13 +19,19 @@ namespace PTfinder.API.Controllers
     public class CoachesController : ControllerBase
     {
         private readonly AppDbContext _context;
+        private readonly Supabase.Client _supabase;
 
         public CoachesController(AppDbContext context)
         {
             _context = context;
+
+            var supabaseUrl = Environment.GetEnvironmentVariable("SUPABASE_URL");
+            var supabaseKey = Environment.GetEnvironmentVariable("SUPABASE_KEY");
+
+            _supabase = new Supabase.Client(supabaseUrl, supabaseKey);
+            _supabase.InitializeAsync().Wait();
         }
 
-        // GET: api/Coaches
         [HttpGet]
         public async Task<ActionResult<IEnumerable<object>>> GetCoaches()
         {
@@ -43,11 +53,7 @@ namespace PTfinder.API.Controllers
                 coach.Price,
                 coach.Description,
                 Category = coach.Category?.Name,
-                Speciality = new
-                {
-                    coach.Speciality?.Id,
-                    coach.Speciality?.Name
-                },
+                Speciality = new { coach.Speciality?.Id, coach.Speciality?.Name },
                 Country = coach.Country?.Name,
                 City = coach.City?.Name,
                 Area = coach.Area?.Name,
@@ -57,7 +63,6 @@ namespace PTfinder.API.Controllers
             return Ok(response);
         }
 
-        // GET: api/Coaches/5
         [HttpGet("{id}")]
         public async Task<IActionResult> GetCoach(int id)
         {
@@ -82,11 +87,7 @@ namespace PTfinder.API.Controllers
                 coach.Price,
                 coach.Description,
                 Category = coach.Category?.Name,
-                Speciality = new
-                {
-                    coach.Speciality?.Id,
-                    coach.Speciality?.Name
-                },
+                Speciality = new { coach.Speciality?.Id, coach.Speciality?.Name },
                 Country = coach.Country?.Name,
                 City = coach.City?.Name,
                 Area = coach.Area?.Name,
@@ -125,18 +126,21 @@ namespace PTfinder.API.Controllers
             if (!string.IsNullOrEmpty(searchParams.Gender))
                 query = query.Where(c => c.Gender.ToLower() == searchParams.Gender.ToLower());
 
-            var result = await query.Select(c => new CoachSearchParams
+            if (searchParams.Price != null)
+                query = query.Where(c => c.Price == searchParams.Price);
+
+            var result = await query.Select(c => new
             {
-                Id = c.Id,
-                FullName = c.FullName,
-                ProfileImage = c.ProfileImage,
-                Price = c.Price,
-                Description = c.Description,
-                CategoryName = c.Category != null ? c.Category.Name : null,
-                SpecialtyName = c.Speciality != null ? c.Speciality.Name : null,
-                CountryName = c.Country != null ? c.Country.Name : null,
-                CityName = c.City != null ? c.City.Name : null,
-                AreaName = c.Area != null ? c.Area.Name : null
+                c.Id,
+                c.FullName,
+                c.ProfileImage,
+                c.Price,
+                c.Description,
+                CategoryName = c.Category.Name,
+                SpecialtyName = c.Speciality.Name,
+                CountryName = c.Country.Name,
+                CityName = c.City.Name,
+                AreaName = c.Area.Name
             }).ToListAsync();
 
             return Ok(result);
@@ -144,7 +148,6 @@ namespace PTfinder.API.Controllers
 
 
 
-        // POST: api/Coaches
         [HttpPost]
         public async Task<ActionResult<Coach>> PostCoach([FromForm] CoachCreateDto dto)
         {
@@ -152,13 +155,22 @@ namespace PTfinder.API.Controllers
 
             if (dto.ProfileImage != null)
             {
-                var fileName = Guid.NewGuid().ToString() + Path.GetExtension(dto.ProfileImage.FileName);
-                var filePath = Path.Combine("wwwroot/images", fileName);
-                using (var stream = new FileStream(filePath, FileMode.Create))
-                {
-                    await dto.ProfileImage.CopyToAsync(stream);
-                }
-                imageUrl = $"/images/{fileName}";
+                var fileName = Guid.NewGuid() + Path.GetExtension(dto.ProfileImage.FileName);
+                await using var stream = dto.ProfileImage.OpenReadStream();
+                var fileBytes = ReadStreamToByteArray(stream);
+
+                var uploaded = await _supabase.Storage
+                    .From("coach-images")
+                    .Upload(fileBytes, fileName, new Supabase.Storage.FileOptions
+                    {
+                        ContentType = dto.ProfileImage.ContentType,
+                        Upsert = true
+                    });
+
+                if (dto.ProfileImage != null)  // Change this line
+                    return StatusCode(500, "Failed to upload image to Supabase.");
+
+                imageUrl = _supabase.Storage.From("coach-images").GetPublicUrl(fileName);
             }
 
             var coach = new Coach
@@ -184,7 +196,6 @@ namespace PTfinder.API.Controllers
             return CreatedAtAction("GetCoach", new { id = coach.Id }, coach);
         }
 
-        // PUT: api/Coaches/5
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateCoach(int id, [FromForm] CoachUpdateDto dto)
         {
@@ -207,14 +218,22 @@ namespace PTfinder.API.Controllers
 
             if (dto.ProfileImage != null)
             {
-                var fileName = Guid.NewGuid().ToString() + Path.GetExtension(dto.ProfileImage.FileName);
-                var filePath = Path.Combine("wwwroot/images", fileName);
-                using (var stream = new FileStream(filePath, FileMode.Create))
-                {
-                    await dto.ProfileImage.CopyToAsync(stream);
-                }
+                var fileName = Guid.NewGuid() + Path.GetExtension(dto.ProfileImage.FileName);
+                await using var stream = dto.ProfileImage.OpenReadStream();
+                var fileBytes = ReadStreamToByteArray(stream);
 
-                coach.ProfileImage = $"/images/{fileName}";
+                var uploaded = await _supabase.Storage
+                    .From("coach-images")
+                    .Upload(fileBytes, fileName, new Supabase.Storage.FileOptions
+                    {
+                        ContentType = dto.ProfileImage.ContentType,
+                        Upsert = true
+                    });
+
+                if (dto.ProfileImage != null)  // Change this line
+                    return StatusCode(500, "Failed to upload image to Supabase.");
+
+                coach.ProfileImage = _supabase.Storage.From("coach-images").GetPublicUrl(fileName);
             }
 
             await _context.SaveChangesAsync();
@@ -222,7 +241,6 @@ namespace PTfinder.API.Controllers
             return NoContent();
         }
 
-        // DELETE: api/Coaches/5
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteCoach(int id)
         {
@@ -235,7 +253,13 @@ namespace PTfinder.API.Controllers
 
             return NoContent();
         }
+
+        private static byte[] ReadStreamToByteArray(Stream stream)
+        {
+            using var memoryStream = new MemoryStream();
+            stream.CopyTo(memoryStream);
+            return memoryStream.ToArray();
+        }
     }
 }
-
 
