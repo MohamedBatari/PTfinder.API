@@ -21,12 +21,13 @@ namespace PTfinder.API.Controllers
         private readonly AppDbContext _context;
         private readonly Supabase.Client _supabase;
 
-        public CoachesController(AppDbContext context)
+        public CoachesController(AppDbContext context, IConfiguration configuration)
         {
             _context = context;
 
-            var supabaseUrl = Environment.GetEnvironmentVariable("SUPABASE_URL");
-            var supabaseKey = Environment.GetEnvironmentVariable("SUPABASE_KEY");
+            var supabaseUrl = configuration["Supabase:Url"];
+            var supabaseKey = configuration["Supabase:Key"];
+
 
             _supabase = new Supabase.Client(supabaseUrl, supabaseKey);
             _supabase.InitializeAsync().Wait();
@@ -100,6 +101,8 @@ namespace PTfinder.API.Controllers
         [HttpGet("Search")]
         public async Task<IActionResult> Search([FromQuery] CoachSearchParams searchParams)
         {
+            searchParams ??= new CoachSearchParams(); // ✅ ensure not null
+
             var query = _context.Coaches
                 .Include(c => c.Category)
                 .Include(c => c.Speciality)
@@ -147,7 +150,6 @@ namespace PTfinder.API.Controllers
         }
 
 
-
         [HttpPost]
         public async Task<ActionResult<Coach>> PostCoach([FromForm] CoachCreateDto dto)
         {
@@ -159,18 +161,22 @@ namespace PTfinder.API.Controllers
                 await using var stream = dto.ProfileImage.OpenReadStream();
                 var fileBytes = ReadStreamToByteArray(stream);
 
-                var uploaded = await _supabase.Storage
-                    .From("coach-images")
-                    .Upload(fileBytes, fileName, new Supabase.Storage.FileOptions
-                    {
-                        ContentType = dto.ProfileImage.ContentType,
-                        Upsert = true
-                    });
+                try
+                {
+                    var uploaded = await _supabase.Storage
+                        .From("coach-images")
+                        .Upload(fileBytes, fileName, new Supabase.Storage.FileOptions
+                        {
+                            ContentType = dto.ProfileImage.ContentType,
+                            Upsert = true
+                        });
 
-                if (dto.ProfileImage != null)  // Change this line
-                    return StatusCode(500, "Failed to upload image to Supabase.");
-
-                imageUrl = _supabase.Storage.From("coach-images").GetPublicUrl(fileName);
+                    imageUrl = _supabase.Storage.From("coach-images").GetPublicUrl(fileName);
+                }
+                catch (Exception ex)
+                {
+                    return StatusCode(500, $"Failed to upload image to Supabase: {ex.Message}");
+                }
             }
 
             var coach = new Coach
@@ -222,18 +228,22 @@ namespace PTfinder.API.Controllers
                 await using var stream = dto.ProfileImage.OpenReadStream();
                 var fileBytes = ReadStreamToByteArray(stream);
 
-                var uploaded = await _supabase.Storage
-                    .From("coach-images")
-                    .Upload(fileBytes, fileName, new Supabase.Storage.FileOptions
-                    {
-                        ContentType = dto.ProfileImage.ContentType,
-                        Upsert = true
-                    });
+                try
+                {
+                    var uploaded = await _supabase.Storage
+                        .From("coach-images")
+                        .Upload(fileBytes, fileName, new Supabase.Storage.FileOptions
+                        {
+                            ContentType = dto.ProfileImage.ContentType,
+                            Upsert = true
+                        });
 
-                if (dto.ProfileImage != null)  // Change this line
-                    return StatusCode(500, "Failed to upload image to Supabase.");
-
-                coach.ProfileImage = _supabase.Storage.From("coach-images").GetPublicUrl(fileName);
+                    coach.ProfileImage = _supabase.Storage.From("coach-images").GetPublicUrl(fileName);
+                }
+                catch (Exception ex)
+                {
+                    return StatusCode(500, $"Failed to upload image to Supabase: {ex.Message}");
+                }
             }
 
             await _context.SaveChangesAsync();
