@@ -101,8 +101,6 @@ namespace PTfinder.API.Controllers
         [HttpGet("Search")]
         public async Task<IActionResult> Search([FromQuery] CoachSearchParams searchParams)
         {
-            searchParams ??= new CoachSearchParams(); // ✅ ensure not null
-
             var query = _context.Coaches
                 .Include(c => c.Category)
                 .Include(c => c.Speciality)
@@ -111,26 +109,31 @@ namespace PTfinder.API.Controllers
                 .Include(c => c.Area)
                 .AsQueryable();
 
-            if (!string.IsNullOrEmpty(searchParams.CategoryName))
-                query = query.Where(c => c.Category.Name.ToLower() == searchParams.CategoryName.ToLower());
+            if (!string.IsNullOrWhiteSpace(searchParams.CategoryName))
+                query = query.Where(c => c.Category != null &&
+                                         c.Category.Name.ToLower().Contains(searchParams.CategoryName.ToLower()));
 
-            if (!string.IsNullOrEmpty(searchParams.SpecialtyName))
-                query = query.Where(c => c.Speciality.Name.ToLower() == searchParams.SpecialtyName.ToLower());
+            if (!string.IsNullOrWhiteSpace(searchParams.SpecialtyName))
+                query = query.Where(c => c.Speciality != null &&
+                                         c.Speciality.Name.ToLower().Contains(searchParams.SpecialtyName.ToLower()));
 
-            if (!string.IsNullOrEmpty(searchParams.CountryName))
-                query = query.Where(c => c.Country.Name.ToLower() == searchParams.CountryName.ToLower());
+            if (!string.IsNullOrWhiteSpace(searchParams.CountryName))
+                query = query.Where(c => c.Country != null &&
+                                         c.Country.Name.ToLower().Contains(searchParams.CountryName.ToLower()));
 
-            if (!string.IsNullOrEmpty(searchParams.CityName))
-                query = query.Where(c => c.City.Name.ToLower() == searchParams.CityName.ToLower());
+            if (!string.IsNullOrWhiteSpace(searchParams.CityName))
+                query = query.Where(c => c.City != null &&
+                                         c.City.Name.ToLower().Contains(searchParams.CityName.ToLower()));
 
-            if (!string.IsNullOrEmpty(searchParams.AreaName))
-                query = query.Where(c => c.Area.Name.ToLower() == searchParams.AreaName.ToLower());
+            if (!string.IsNullOrWhiteSpace(searchParams.AreaName))
+                query = query.Where(c => c.Area != null &&
+                                         c.Area.Name.ToLower().Contains(searchParams.AreaName.ToLower()));
 
-            if (!string.IsNullOrEmpty(searchParams.Gender))
-                query = query.Where(c => c.Gender.ToLower() == searchParams.Gender.ToLower());
+            if (!string.IsNullOrWhiteSpace(searchParams.Gender))
+                query = query.Where(c => !string.IsNullOrEmpty(c.Gender) &&
+                                         c.Gender.ToLower().Contains(searchParams.Gender.ToLower()));
 
-            if (searchParams.Price != null)
-                query = query.Where(c => c.Price == searchParams.Price);
+
 
             var result = await query.Select(c => new
             {
@@ -139,11 +142,11 @@ namespace PTfinder.API.Controllers
                 c.ProfileImage,
                 c.Price,
                 c.Description,
-                CategoryName = c.Category.Name,
-                SpecialtyName = c.Speciality.Name,
-                CountryName = c.Country.Name,
-                CityName = c.City.Name,
-                AreaName = c.Area.Name
+                CategoryName = c.Category != null ? c.Category.Name : null,
+                SpecialtyName = c.Speciality != null ? c.Speciality.Name : null,
+                CountryName = c.Country != null ? c.Country.Name : null,
+                CityName = c.City != null ? c.City.Name : null,
+                AreaName = c.Area != null ? c.Area.Name : null
             }).ToListAsync();
 
             return Ok(result);
