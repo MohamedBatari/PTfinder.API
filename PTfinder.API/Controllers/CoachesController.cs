@@ -42,6 +42,9 @@ namespace PTfinder.API.Controllers
                 .Include(c => c.Country)
                 .Include(c => c.City)
                 .Include(c => c.Area)
+                .Include(c => c.Availabilities)
+                .Include(c => c.Reviews)
+                .Include(c => c.GalleryMedia)
                 .ToListAsync();
 
             var response = coaches.Select(coach => new
@@ -58,7 +61,13 @@ namespace PTfinder.API.Controllers
                 Country = coach.Country?.Name,
                 City = coach.City?.Name,
                 Area = coach.Area?.Name,
-                coach.ProfileImage
+                coach.ProfileImage,
+                Availabilities = coach.Availabilities.Select(a => new
+                {
+                    a.Id,
+                    AvailableDate = a.AvailableDate.ToString("yyyy-MM-dd"),
+                    a.TimeSlot
+                }).ToList()
             });
 
             return Ok(response);
@@ -73,6 +82,9 @@ namespace PTfinder.API.Controllers
                 .Include(c => c.Country)
                 .Include(c => c.City)
                 .Include(c => c.Area)
+                .Include(c => c.Availabilities)
+                .Include(c => c.Reviews)
+                .Include(c => c.GalleryMedia)
                 .FirstOrDefaultAsync(c => c.Id == id);
 
             if (coach == null)
@@ -92,7 +104,13 @@ namespace PTfinder.API.Controllers
                 Country = coach.Country?.Name,
                 City = coach.City?.Name,
                 Area = coach.Area?.Name,
-                coach.ProfileImage
+                coach.ProfileImage,
+                Availabilities = coach.Availabilities.Select(a => new
+                {
+                    a.Id,
+                    AvailableDate = a.AvailableDate.ToString("yyyy-MM-dd"),
+                    a.TimeSlot
+                }).ToList()
             };
 
             return Ok(response);
