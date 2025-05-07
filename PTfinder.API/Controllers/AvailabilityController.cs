@@ -59,6 +59,30 @@ namespace PTfinder.API.Controllers
             });
         }
 
+        // GET: api/Availabilities/find
+        [HttpGet("find")]
+        public async Task<IActionResult> FindAvailability(int coachId, DateTime date, string timeSlot)
+        {
+            var availability = await _context.Availabilities
+                .FirstOrDefaultAsync(a =>
+                    a.CoachId == coachId &&
+                    a.AvailableDate.Date == date.Date && // Make sure you compare dates only
+                    a.TimeSlot == timeSlot
+                );
+
+            if (availability == null)
+                return NotFound();
+
+            return Ok(new
+            {
+                availability.Id,
+                availability.CoachId,
+                availability.AvailableDate,
+                availability.TimeSlot
+            });
+        }
+
+
         // POST: api/Availabilities
         [HttpPost]
         public async Task<ActionResult<Availability>> CreateAvailability(AvailabilityCreateDto dto)
