@@ -61,26 +61,62 @@ namespace PTfinder.API.Controllers
 
         // GET: api/Availabilities/find
         [HttpGet("find")]
-        public async Task<IActionResult> FindAvailability(int coachId, DateTime date, string timeSlot)
+        public async Task<IActionResult> FindAvailability(
+         int coachId,
+         DateTime? date = null,  // ✅ make nullable
+         string timeSlot = null  // ✅ make nullable
+     )
         {
-            var availability = await _context.Availabilities
-                .FirstOrDefaultAsync(a =>
-                    a.CoachId == coachId &&
-                    a.AvailableDate.Date == date.Date && // Make sure you compare dates only
-                    a.TimeSlot == timeSlot
-                );
+            // Start with the base query
+            var query = _context.Availabilities
+                .Where(a => a.CoachId == coachId);
 
-            if (availability == null)
+            // Apply date filter if provided
+            if (date.HasValue)
+            {
+                query = query.Where(a => a.AvailableDate.Date == date.Value.Date);
+            }
+
+            // Apply timeSlot filter if provided
+            if (!string.IsNullOrEmpty(timeSlot))
+            {
+                query = query.Where(a => a.TimeSlot == timeSlot);
+            }
+
+            // If timeSlot & date provided → return single (old behavior)
+            if (date.HasValue && !string.IsNullOrEmpty(timeSlot))
+            {
+                var availability = await query.FirstOrDefaultAsync();
+
+                if (availability == null)
+                    return NotFound();
+
+                return Ok(new
+                {
+                    availability.Id,
+                    availability.CoachId,
+                    availability.AvailableDate,
+                    availability.TimeSlot
+                });
+            }
+
+            // Otherwise → return full list
+            var availabilities = await query
+                .Select(a => new
+                {
+                    a.Id,
+                    a.CoachId,
+                    a.AvailableDate,
+                    a.TimeSlot
+                })
+                .ToListAsync();
+
+            if (!availabilities.Any())
                 return NotFound();
 
-            return Ok(new
-            {
-                availability.Id,
-                availability.CoachId,
-                availability.AvailableDate,
-                availability.TimeSlot
-            });
+            return Ok(availabilities);
         }
+
 
 
         // POST: api/Availabilities
