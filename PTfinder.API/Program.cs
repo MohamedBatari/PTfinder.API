@@ -3,17 +3,19 @@ using Microsoft.EntityFrameworkCore;
 using PTfinder.API.DATA;
 using Npgsql.EntityFrameworkCore.PostgreSQL;
 using DotNetEnv;
-
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
 Env.Load();
 
-// Database config
+// ✅ 1️⃣ Database config
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("mycon")));
 
-// Add services
+// ✅ 2️⃣ Add services
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
@@ -28,7 +30,7 @@ builder.Services.Configure<ApiBehaviorOptions>(options =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// CORS
+// ✅ 3️⃣ CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReactApp", policyBuilder =>
@@ -40,16 +42,34 @@ builder.Services.AddCors(options =>
     });
 });
 
+// ✅ 4️⃣ Authentication - this MUST BE BEFORE builder.Build()
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = false,
+        ValidateAudience = false,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(builder.Configuration["Jwt:Key"]))  
+    };
+});
+
 var app = builder.Build();
 
-// Auto migrate DB
+// ✅ 5️⃣ Auto migrate DB
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.Migrate();
 }
 
-// Exception handler
+// ✅ 6️⃣ Exception handler
 app.UseExceptionHandler(errorApp =>
 {
     errorApp.Run(async context =>
@@ -65,7 +85,7 @@ app.UseExceptionHandler(errorApp =>
     });
 });
 
-// Middleware pipeline
+// ✅ 7️⃣ Middleware pipeline
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -74,8 +94,12 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseCors("AllowReactApp");
+
+// ✅ VERY IMPORTANT: Authentication FIRST, then Authorization
+app.UseAuthentication();
 app.UseAuthorization();
-app.MapControllers();
+
 app.UseStaticFiles();
+app.MapControllers();
 
 app.Run();
