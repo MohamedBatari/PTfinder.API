@@ -170,6 +170,14 @@ namespace PTfinder.API.Controllers
             return Ok(result);
         }
 
+        [HttpGet("check-email")]
+        public async Task<IActionResult> CheckEmailExists(string email)
+        {
+            var coachExists = await _context.Coaches.AnyAsync(c => c.Email == email);
+            return Ok(new { exists = coachExists });
+        }
+
+
 
         [HttpPost]
         public async Task<ActionResult<Coach>> PostCoach([FromForm] CoachCreateDto dto)
