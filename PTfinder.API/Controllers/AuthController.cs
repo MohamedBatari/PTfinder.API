@@ -25,7 +25,6 @@ namespace PTfinder.API.Controllers
         [HttpPost("login")]
         public IActionResult Login([FromBody] LoginRequest request)
         {
-            // ✅ 1. Find the coach by email
             var coach = _context.Coaches.SingleOrDefault(c => c.Email == request.Email);
 
             if (coach == null || coach.Password != request.Password)
@@ -33,14 +32,12 @@ namespace PTfinder.API.Controllers
                 return Unauthorized(new { message = "Invalid email or password" });
             }
 
-            // ✅ 2. Generate JWT token
             var token = GenerateJwtToken(coach);
 
-            // ✅ 3. Return token + coach Id
             return Ok(new
             {
                 token,
-                coachId = coach.Id  // 👈 Use coach.Id (NOT coach.CoachId)
+                coachId = coach.Id  
             });
         }
 
@@ -52,7 +49,7 @@ namespace PTfinder.API.Controllers
             var claims = new[]
             {
             new Claim(ClaimTypes.Email, coach.Email),
-            new Claim("CoachId", coach.Id.ToString())  // 👈 Again: coach.Id
+            new Claim("CoachId", coach.Id.ToString())  
         };
 
             var tokenDescriptor = new SecurityTokenDescriptor

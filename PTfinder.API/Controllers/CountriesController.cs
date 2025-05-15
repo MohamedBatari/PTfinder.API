@@ -17,7 +17,6 @@ namespace PTfinder.API.Controllers
             _context = context;
         }
 
-        // GET: api/Country
         [HttpGet]
         public async Task<ActionResult<IEnumerable<Country>>> GetCountries()
         {

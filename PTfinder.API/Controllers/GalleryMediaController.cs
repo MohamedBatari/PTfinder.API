@@ -24,7 +24,6 @@ namespace PTfinder.API.Controllers
             _supabase.InitializeAsync().Wait();
         }
 
-        // ✅ Get gallery by coach
         [HttpGet("coach/{coachId}")]
         public async Task<ActionResult<IEnumerable<GalleryMediaDto>>> GetGalleryForCoach(int coachId)
         {
@@ -42,14 +41,13 @@ namespace PTfinder.API.Controllers
             return Ok(gallery);
         }
 
-        // ✅ Upload new media
         [HttpPost("upload")]
         public async Task<IActionResult> UploadMedia([FromForm] GalleryMediaCreateDto dto)
         {
             if (dto.File == null || dto.File.Length == 0)
                 return BadRequest("No file uploaded.");
 
-            var bucketName = "coach-gallery"; // ✅ Your bucket name
+            var bucketName = "coach-gallery"; 
 
             var storage = _supabase.Storage;
             var bucket = storage.From(bucketName);
@@ -74,7 +72,6 @@ namespace PTfinder.API.Controllers
                 }
 
 
-                // Get the public URL
                 var publicUrl = bucket.GetPublicUrl(uniqueFileName);
 
                 var galleryMedia = new GalleryMedia
@@ -104,7 +101,6 @@ namespace PTfinder.API.Controllers
         }
 
 
-        // ✅ DELETE media by id
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteMedia(int id)
         {
@@ -112,19 +108,16 @@ namespace PTfinder.API.Controllers
             if (galleryItem == null)
                 return NotFound("Media not found.");
 
-            var bucketName = "coach-gallery"; // same bucket name
+            var bucketName = "coach-gallery"; 
             var storage = _supabase.Storage;
             var bucket = storage.From(bucketName);
 
-            // Get the file name from the URL (Supabase public URLs contain the file path after the bucket)
             var filePath = new Uri(galleryItem.Url).Segments.Last();
 
             try
             {
-                // ❌ Delete from Supabase
                 await bucket.Remove(new List<string> { filePath });
 
-                // 🗑️ Delete from database
                 _context.GalleryMedia.Remove(galleryItem);
                 await _context.SaveChangesAsync();
 

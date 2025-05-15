@@ -18,11 +18,9 @@ namespace PTfinder.API.Controllers
             _context = context;
         }
 
-        // POST: api/bookings
         [HttpPost]
         public async Task<ActionResult<Booking>> CreateBooking(BookingCreateDto dto)
         {
-            // Check if the coach exists
             var coach = await _context.Coaches.FindAsync(dto.CoachId);
             if (coach == null)
             {
@@ -37,14 +35,12 @@ namespace PTfinder.API.Controllers
                 StudentPhone = dto.StudentPhone,
                 BookingDate = dto.BookingDate,
                 TimeSlot = dto.TimeSlot,
-                Status = BookingStatus.Pending // Default status is Pending
+                Status = BookingStatus.Pending 
             };
 
-            // Add the booking to the database
             _context.Bookings.Add(booking);
             await _context.SaveChangesAsync();
 
-            // Return the newly created booking
             return CreatedAtAction(nameof(GetBooking), new { id = booking.Id }, booking);
         }
 
@@ -64,12 +60,11 @@ namespace PTfinder.API.Controllers
         }
 
 
-        // GET: api/bookings/5
         [HttpGet("{id}")]
         public async Task<ActionResult<Booking>> GetBooking(int id)
         {
             var booking = await _context.Bookings
-                .Include(b => b.Coach) // Optionally include related Coach data
+                .Include(b => b.Coach) 
                 .FirstOrDefaultAsync(b => b.Id == id);
 
             if (booking == null)
@@ -80,28 +75,23 @@ namespace PTfinder.API.Controllers
             return Ok(booking);
         }
 
-        // PUT: api/bookings/5/status
         [HttpPut("{id}/status")]
         public async Task<IActionResult> UpdateBookingStatus(int id, [FromBody] BookingStatusDto statusDto)
         {
-            // Find the booking by ID
             var booking = await _context.Bookings.FindAsync(id);
             if (booking == null)
             {
                 return NotFound($"Booking with ID {id} not found.");
             }
 
-            // Update the status
             booking.Status = statusDto.Status;
 
-            // Save changes to the database
             await _context.SaveChangesAsync();
 
-            return NoContent(); // Successfully updated the booking status
+            return NoContent(); 
         }
 
 
-        // DELETE: api/bookings/5
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteBooking(int id)
         {

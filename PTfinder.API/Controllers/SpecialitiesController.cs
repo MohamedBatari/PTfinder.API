@@ -22,7 +22,7 @@ namespace PTfinder.API.Controllers
         public async Task<ActionResult<Speciality>> GetSpeciality(int id)
         {
             var speciality = await _context.Specialities
-                .Include(s => s.Category) // if you want to include the related category
+                .Include(s => s.Category) 
                 .FirstOrDefaultAsync(s => s.Id == id);
 
             if (speciality == null)

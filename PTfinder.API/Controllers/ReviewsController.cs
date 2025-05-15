@@ -44,7 +44,6 @@ namespace PTfinder.API.Controllers
             _context.Reviews.Add(review);
             await _context.SaveChangesAsync();
 
-            // Optionally return a DTO back (instead of the full Review)
             var response = new ReviewDto
             {
                 Id = review.Id,
