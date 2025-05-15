@@ -17,7 +17,6 @@ namespace PTfinder.API.Controllers
             _context = context;
         }
 
-        // GET: api/Area/city/1
         [HttpGet("city/{cityId}")]
         public async Task<ActionResult<IEnumerable<Area>>> GetAreasByCity(int cityId)
         {

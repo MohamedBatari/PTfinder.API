@@ -19,7 +19,6 @@ namespace PTfinder.API.Controllers
             _context = context;
         }
 
-        // GET: api/Availabilities
         [HttpGet]
         public async Task<ActionResult<IEnumerable<object>>> GetAvailabilities()
         {
@@ -38,7 +37,6 @@ namespace PTfinder.API.Controllers
             return Ok(availabilities);
         }
 
-        // GET: api/Availabilities/5
         [HttpGet("{id}")]
         public async Task<ActionResult<object>> GetAvailabilityById(int id)
         {
@@ -59,31 +57,26 @@ namespace PTfinder.API.Controllers
             });
         }
 
-        // GET: api/Availabilities/find
         [HttpGet("find")]
         public async Task<IActionResult> FindAvailability(
          int coachId,
-         DateTime? date = null,  // ✅ make nullable
-         string timeSlot = null  // ✅ make nullable
+         DateTime? date = null, 
+         string timeSlot = null  
      )
         {
-            // Start with the base query
             var query = _context.Availabilities
                 .Where(a => a.CoachId == coachId);
 
-            // Apply date filter if provided
             if (date.HasValue)
             {
                 query = query.Where(a => a.AvailableDate.Date == date.Value.Date);
             }
 
-            // Apply timeSlot filter if provided
             if (!string.IsNullOrEmpty(timeSlot))
             {
                 query = query.Where(a => a.TimeSlot == timeSlot);
             }
 
-            // If timeSlot & date provided → return single (old behavior)
             if (date.HasValue && !string.IsNullOrEmpty(timeSlot))
             {
                 var availability = await query.FirstOrDefaultAsync();
@@ -100,7 +93,6 @@ namespace PTfinder.API.Controllers
                 });
             }
 
-            // Otherwise → return full list
             var availabilities = await query
                 .Select(a => new
                 {
@@ -119,7 +111,6 @@ namespace PTfinder.API.Controllers
 
 
 
-        // POST: api/Availabilities
         [HttpPost]
         public async Task<ActionResult<Availability>> CreateAvailability(AvailabilityCreateDto dto)
         {
@@ -136,7 +127,6 @@ namespace PTfinder.API.Controllers
             return CreatedAtAction(nameof(GetAvailabilityById), new { id = availability.Id }, availability);
         }
 
-        // PUT: api/Availabilities/5
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateAvailability(int id, AvailabilityUpdateDto dto)
         {
@@ -151,7 +141,6 @@ namespace PTfinder.API.Controllers
             return NoContent();
         }
 
-        // DELETE: api/Availabilities/5
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteAvailability(int id)
         {

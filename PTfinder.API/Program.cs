@@ -11,11 +11,9 @@ var builder = WebApplication.CreateBuilder(args);
 
 Env.Load();
 
-// ✅ 1️⃣ Database config
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("mycon")));
 
-// ✅ 2️⃣ Add services
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
@@ -30,7 +28,6 @@ builder.Services.Configure<ApiBehaviorOptions>(options =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// ✅ 3️⃣ CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReactApp", policyBuilder =>
@@ -42,7 +39,6 @@ builder.Services.AddCors(options =>
     });
 });
 
-// ✅ 4️⃣ Authentication - this MUST BE BEFORE builder.Build()
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -62,14 +58,12 @@ builder.Services.AddAuthentication(options =>
 
 var app = builder.Build();
 
-// ✅ 5️⃣ Auto migrate DB
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.Migrate();
 }
 
-// ✅ 6️⃣ Exception handler
 app.UseExceptionHandler(errorApp =>
 {
     errorApp.Run(async context =>
@@ -85,7 +79,6 @@ app.UseExceptionHandler(errorApp =>
     });
 });
 
-// ✅ 7️⃣ Middleware pipeline
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -95,7 +88,6 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseCors("AllowReactApp");
 
-// ✅ VERY IMPORTANT: Authentication FIRST, then Authorization
 app.UseAuthentication();
 app.UseAuthorization();
 
