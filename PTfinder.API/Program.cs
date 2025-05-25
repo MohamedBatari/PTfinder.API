@@ -33,7 +33,7 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowReactApp", policyBuilder =>
     {
         policyBuilder
-            .WithOrigins("https://pt-finder-now.vercel.app")
+            .WithOrigins("https://ptfindernow.com")
             .AllowAnyHeader()
             .AllowAnyMethod();
     });
