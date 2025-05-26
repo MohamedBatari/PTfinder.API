@@ -33,7 +33,8 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowReactApp", policyBuilder =>
     {
         policyBuilder
-            .WithOrigins("https://ptfindernow.com", "https://www.ptfindernow.com")
+            .WithOrigins("https://ptfindernow.com", "https://www.ptfindernow.com",
+                "http://localhost:3000")
             .AllowAnyHeader()
             .AllowAnyMethod();
     });
