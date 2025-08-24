@@ -2,8 +2,8 @@
 {
     public class GalleryMediaCreateDto
     {
-        public IFormFile File { get; set; }     // The file (image/video)
-        public string MediaType { get; set; }   // "image" or "video"
+        public IFormFile File { get; set; }     
+        public string MediaType { get; set; }   
         public int CoachId { get; set; }
     }
 }

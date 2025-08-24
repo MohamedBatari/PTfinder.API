@@ -1,24 +1,28 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PTfinder.API.DATA;
-using Npgsql.EntityFrameworkCore.PostgreSQL;
 using DotNetEnv;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using PTfinder.API.Services;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
 Env.Load();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("mycon")));
+    options.UseSqlServer(builder.Configuration.GetConnectionString("mycon")));
+
 
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
     });
+builder.Services.AddSingleton<BlobStorageService>();
+
 
 builder.Services.Configure<ApiBehaviorOptions>(options =>
 {
