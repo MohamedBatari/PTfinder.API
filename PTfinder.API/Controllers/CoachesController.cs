@@ -5,12 +5,12 @@ using PTfinder.API.DATA.Modules;
 using PTfinder.API.DATA;
 using Microsoft.EntityFrameworkCore;
 using System.IO;
-using YourAppNamespace.Models.DTOs;
-using Supabase;
+using YourAppNamespace.Models.DTOs; // keep if you actually use types from here; otherwise remove
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using PTfinder.API.Services;
 
 namespace PTfinder.API.Controllers
 {
@@ -19,20 +19,15 @@ namespace PTfinder.API.Controllers
     public class CoachesController : ControllerBase
     {
         private readonly AppDbContext _context;
-        private readonly Supabase.Client _supabase;
+        private readonly BlobStorageService _blobs;
 
-        public CoachesController(AppDbContext context, IConfiguration configuration)
+        public CoachesController(AppDbContext context, BlobStorageService blobs)
         {
             _context = context;
-
-            var supabaseUrl = configuration["Supabase:Url"];
-            var supabaseKey = configuration["Supabase:Key"];
-
-
-            _supabase = new Supabase.Client(supabaseUrl, supabaseKey);
-            _supabase.InitializeAsync().Wait();
+            _blobs = blobs;
         }
 
+        // GET: api/coaches
         [HttpGet]
         public async Task<ActionResult<IEnumerable<object>>> GetCoaches()
         {
@@ -61,7 +56,12 @@ namespace PTfinder.API.Controllers
                 Country = coach.Country?.Name,
                 City = coach.City?.Name,
                 Area = coach.Area?.Name,
-                coach.ProfileImage,
+
+                // Store blob name in DB, return SAS URL to client
+                ProfileImage = string.IsNullOrWhiteSpace(coach.ProfileImage)
+                    ? null
+                    : _blobs.GetReadUrl(coach.ProfileImage, TimeSpan.FromMinutes(60)),
+
                 Availabilities = coach.Availabilities.Select(a => new
                 {
                     a.Id,
@@ -73,6 +73,7 @@ namespace PTfinder.API.Controllers
             return Ok(response);
         }
 
+        // GET: api/coaches/{id}
         [HttpGet("{id}")]
         public async Task<IActionResult> GetCoach(int id)
         {
@@ -104,7 +105,12 @@ namespace PTfinder.API.Controllers
                 Country = coach.Country?.Name,
                 City = coach.City?.Name,
                 Area = coach.Area?.Name,
-                coach.ProfileImage,
+
+                // Return SAS URL
+                ProfileImage = string.IsNullOrWhiteSpace(coach.ProfileImage)
+                    ? null
+                    : _blobs.GetReadUrl(coach.ProfileImage, TimeSpan.FromMinutes(60)),
+
                 Availabilities = coach.Availabilities.Select(a => new
                 {
                     a.Id,
@@ -116,6 +122,7 @@ namespace PTfinder.API.Controllers
             return Ok(response);
         }
 
+        // GET: api/coaches/search
         [HttpGet("Search")]
         public async Task<IActionResult> Search([FromQuery] CoachSearchParams searchParams)
         {
@@ -151,13 +158,16 @@ namespace PTfinder.API.Controllers
                 query = query.Where(c => !string.IsNullOrEmpty(c.Gender) &&
                                          c.Gender.ToLower().Contains(searchParams.Gender.ToLower()));
 
-
-
             var result = await query.Select(c => new
             {
                 c.Id,
                 c.FullName,
-                c.ProfileImage,
+
+                // Return SAS URL
+                ProfileImage = string.IsNullOrWhiteSpace(c.ProfileImage)
+                    ? null
+                    : _blobs.GetReadUrl(c.ProfileImage, TimeSpan.FromMinutes(60)),
+
                 c.Price,
                 c.Description,
                 CategoryName = c.Category != null ? c.Category.Name : null,
@@ -170,6 +180,7 @@ namespace PTfinder.API.Controllers
             return Ok(result);
         }
 
+        // GET: api/coaches/check-email?email=...
         [HttpGet("check-email")]
         public async Task<IActionResult> CheckEmailExists(string email)
         {
@@ -177,35 +188,21 @@ namespace PTfinder.API.Controllers
             return Ok(new { exists = coachExists });
         }
 
-
-
+        // POST: api/coaches   (multipart/form-data)
         [HttpPost]
         public async Task<ActionResult<Coach>> PostCoach([FromForm] CoachCreateDto dto)
         {
-            string imageUrl = null;
+            string? blobName = null;
 
-            if (dto.ProfileImage != null)
+            if (dto.ProfileImage != null && dto.ProfileImage.Length > 0)
             {
                 var fileName = Guid.NewGuid() + Path.GetExtension(dto.ProfileImage.FileName);
+
                 await using var stream = dto.ProfileImage.OpenReadStream();
-                var fileBytes = ReadStreamToByteArray(stream);
+                await _blobs.UploadAsync(fileName, stream, dto.ProfileImage.ContentType);
 
-                try
-                {
-                    var uploaded = await _supabase.Storage
-                        .From("coach-images")
-                        .Upload(fileBytes, fileName, new Supabase.Storage.FileOptions
-                        {
-                            ContentType = dto.ProfileImage.ContentType,
-                            Upsert = true
-                        });
-
-                    imageUrl = _supabase.Storage.From("coach-images").GetPublicUrl(fileName);
-                }
-                catch (Exception ex)
-                {
-                    return StatusCode(500, $"Failed to upload image to Supabase: {ex.Message}");
-                }
+                // store the blob name (NOT a public URL)
+                blobName = fileName;
             }
 
             var coach = new Coach
@@ -222,7 +219,9 @@ namespace PTfinder.API.Controllers
                 CountryId = dto.CountryId,
                 CityId = dto.CityId,
                 AreaId = dto.AreaId,
-                ProfileImage = imageUrl
+
+                // store blob name in DB
+                ProfileImage = blobName
             };
 
             _context.Coaches.Add(coach);
@@ -231,6 +230,7 @@ namespace PTfinder.API.Controllers
             return CreatedAtAction("GetCoach", new { id = coach.Id }, coach);
         }
 
+        // PUT: api/coaches/{id}  (multipart/form-data)
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateCoach(int id, [FromForm] CoachUpdateDto dto)
         {
@@ -251,28 +251,18 @@ namespace PTfinder.API.Controllers
             coach.CityId = dto.CityId;
             coach.AreaId = dto.AreaId;
 
-            if (dto.ProfileImage != null)
+            if (dto.ProfileImage != null && dto.ProfileImage.Length > 0)
             {
-                var fileName = Guid.NewGuid() + Path.GetExtension(dto.ProfileImage.FileName);
+                var newName = Guid.NewGuid() + Path.GetExtension(dto.ProfileImage.FileName);
+
                 await using var stream = dto.ProfileImage.OpenReadStream();
-                var fileBytes = ReadStreamToByteArray(stream);
+                await _blobs.UploadAsync(newName, stream, dto.ProfileImage.ContentType);
 
-                try
-                {
-                    var uploaded = await _supabase.Storage
-                        .From("coach-images")
-                        .Upload(fileBytes, fileName, new Supabase.Storage.FileOptions
-                        {
-                            ContentType = dto.ProfileImage.ContentType,
-                            Upsert = true
-                        });
+                // delete old blob if any
+                if (!string.IsNullOrWhiteSpace(coach.ProfileImage))
+                    await _blobs.DeleteAsync(coach.ProfileImage);
 
-                    coach.ProfileImage = _supabase.Storage.From("coach-images").GetPublicUrl(fileName);
-                }
-                catch (Exception ex)
-                {
-                    return StatusCode(500, $"Failed to upload image to Supabase: {ex.Message}");
-                }
+                coach.ProfileImage = newName; // store new blob name
             }
 
             await _context.SaveChangesAsync();
@@ -280,12 +270,19 @@ namespace PTfinder.API.Controllers
             return NoContent();
         }
 
+        // DELETE: api/coaches/{id}
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteCoach(int id)
         {
             var coach = await _context.Coaches.FindAsync(id);
             if (coach == null)
                 return NotFound();
+
+            // delete avatar blob if any
+            if (!string.IsNullOrWhiteSpace(coach.ProfileImage))
+            {
+                await _blobs.DeleteAsync(coach.ProfileImage);
+            }
 
             _context.Coaches.Remove(coach);
             await _context.SaveChangesAsync();
