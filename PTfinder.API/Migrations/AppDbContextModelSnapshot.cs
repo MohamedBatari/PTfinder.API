@@ -176,6 +176,15 @@ namespace PTfinder.API.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<DateTime?>("EmailVerificationExpiresUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("EmailVerificationToken")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("EmailVerified")
+                        .HasColumnType("bit");
+
                     b.Property<string>("FullName")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");

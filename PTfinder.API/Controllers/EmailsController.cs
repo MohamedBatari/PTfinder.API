@@ -18,15 +18,17 @@ public class EmailsController : ControllerBase
         _smtp = smtp.Value;
     }
 
-    // Deliverability headers per flow
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Shared deliverability headers + tags
+    // ─────────────────────────────────────────────────────────────────────────────
     private Dictionary<string, string> FlowHeaders(string flow) => new()
     {
         { "List-Unsubscribe", "<mailto:unsubscribe@ptfindernow.com>, <https://ptfindernow.com/unsubscribe>" },
         { "List-Unsubscribe-Post", "List-Unsubscribe=One-Click" },
         { "Auto-Submitted", "auto-generated" },
         { "X-Auto-Response-Suppress", "All" },
-        { "Feedback-ID", $"ptn-tx:{flow}:ptfindernow" } // keep if you use Feedback-ID
-        // Note: X-SES-CONFIGURATION-SET is added automatically in SmtpEmailSender from _smtp.ConfigSet
+        { "Feedback-ID", $"ptn-tx:{flow}:ptfindernow" }
+        // If you later use SES config sets via SMTP, keep adding X-SES-CONFIGURATION-SET at the transport.
     };
 
     private static IEnumerable<(string Name, string Value)> Tags(params (string, string)[] xs)
@@ -40,126 +42,240 @@ public class EmailsController : ControllerBase
         return list;
     }
 
-    // ── Verification (link)
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Verification (link)
+    // ─────────────────────────────────────────────────────────────────────────────
     [HttpPost("verify-link")]
     public async Task<IActionResult> VerifyLink([FromBody] VerifyLinkEmailDto dto, CancellationToken ct)
     {
-        var subject = "Verify your email for PTfinderNow";
+        var subject = "Verify your email address — PTfinderNow";
         var text =
 $@"Hi {dto.FirstName},
 
-Please verify your email to finish setting up your PTfinderNow account:
+Please verify your email address to activate your PTfinderNow account:
 {dto.VerifyUrl}
 
-This link expires in {dto.ExpiresMinutes} minutes.
-If you didn’t sign up, you can ignore this email.
+This link expires in {dto.ExpiresMinutes} minutes. If you didn’t create an account, you can safely ignore this message.
 
 {EmailText.Footer}";
-        await _sender.SendAsync(dto.To, subject, null, text, ct,
+        await _sender.SendAsync(
+            to: dto.To,
+            subject: subject,
+            htmlBody: null,
+            textBody: text,
+            ct: ct,
             headers: FlowHeaders("verify-link"),
             tags: Tags(("flow", "verify-link")),
-            fromOverride: _smtp.FromAddresses.Verification);
+            fromOverride: _smtp.FromAddresses.Verification
+        );
         return Ok(new { sent = true });
     }
 
-    // ── Verification (OTP)
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Verification (OTP)
+    // ─────────────────────────────────────────────────────────────────────────────
     [HttpPost("verify-otp")]
     public async Task<IActionResult> VerifyOtp([FromBody] VerifyOtpEmailDto dto, CancellationToken ct)
     {
-        var subject = $"Your PTfinderNow verification code: {dto.Code}";
+        var subject = $"Your verification code: {dto.Code} — PTfinderNow";
         var text =
 $@"Hi {dto.FirstName},
 
 Use this code to verify your email:
 {dto.Code}
 
-Do not share this code. It expires in {dto.ExpiresMinutes} minutes.
-If you didn’t request this, ignore this email.
+Do not share this code. It expires in {dto.ExpiresMinutes} minutes. If you didn’t request this, please ignore it.
 
 {EmailText.Footer}";
-        await _sender.SendAsync(dto.To, subject, null, text, ct,
+        await _sender.SendAsync(
+            to: dto.To,
+            subject: subject,
+            htmlBody: null,
+            textBody: text,
+            ct: ct,
             headers: FlowHeaders("verify-otp"),
             tags: Tags(("flow", "verify-otp")),
-            fromOverride: _smtp.FromAddresses.Verification);
+            fromOverride: _smtp.FromAddresses.Verification
+        );
         return Ok(new { sent = true });
     }
 
-    // ── Email verified
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Email verified (generic – used by client or coach if you want one route)
+    // ─────────────────────────────────────────────────────────────────────────────
     [HttpPost("email-verified")]
     public async Task<IActionResult> EmailVerified([FromBody] EmailVerifiedEmailDto dto, CancellationToken ct)
     {
-        var subject = "Your email is verified — PTfinderNow";
+        var subject = "Email verified — PTfinderNow";
         var text =
-$@"Congrats {dto.FirstName}! 🎉
+$@"Hi {dto.FirstName},
 
-Your email is now verified. You can start booking sessions right away.
+Your email address has been verified.
 
-Dashboard:
+You can now access your dashboard:
 {dto.DashboardUrl}
 
-Need help? Just reply to this email.
+If you didn’t request this verification, please let us know by replying to this email.
 
 {EmailText.Footer}";
-        await _sender.SendAsync(dto.To, subject, null, text, ct,
+        await _sender.SendAsync(
+            to: dto.To,
+            subject: subject,
+            htmlBody: null,
+            textBody: text,
+            ct: ct,
             headers: FlowHeaders("email-verified"),
             tags: Tags(("flow", "email-verified")),
-            fromOverride: _smtp.FromAddresses.Welcome);
+            fromOverride: _smtp.FromAddresses.Welcome
+        );
         return Ok(new { sent = true });
     }
 
-    // ── Welcome
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Email verified (coach-specific tone)
+    // ─────────────────────────────────────────────────────────────────────────────
+    [HttpPost("email-verified-coach")]
+    public async Task<IActionResult> EmailVerifiedCoach([FromBody] EmailVerifiedEmailDto dto, CancellationToken ct)
+    {
+        var subject = "Email verified — you’re ready to accept bookings";
+        var text =
+$@"Hi {dto.FirstName},
+
+Your email is verified and your coach account is active.
+
+Next steps to go live:
+• Complete your profile (bio, specialties, pricing, locations)
+• Add a high-quality profile photo
+• Set your availability so clients can request sessions
+
+Open your dashboard:
+{dto.DashboardUrl}
+
+If you need help at any time, just reply to this email.
+
+{EmailText.Footer}";
+        await _sender.SendAsync(
+            to: dto.To,
+            subject: subject,
+            htmlBody: null,
+            textBody: text,
+            ct: ct,
+            headers: FlowHeaders("email-verified-coach"),
+            tags: Tags(("flow", "email-verified-coach")),
+            fromOverride: _smtp.FromAddresses.Welcome
+        );
+        return Ok(new { sent = true });
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Welcome (COACH) — this replaces the old “browse coaches” wording
+    // ─────────────────────────────────────────────────────────────────────────────
     [HttpPost("welcome")]
-    public async Task<IActionResult> Welcome([FromBody] WelcomeEmailDto dto, CancellationToken ct)
+    public async Task<IActionResult> WelcomeCoach([FromBody] WelcomeEmailDto dto, CancellationToken ct)
     {
         var subject = $"Welcome to PTfinderNow, {dto.FirstName}";
         var text =
-$@"Welcome aboard, {dto.FirstName}! 🙌
+$@"Hi {dto.FirstName},
 
-What’s next:
-• Browse coaches that match your goals
-• Request a session
-• Manage your bookings and reminders
+Welcome aboard. Let’s set you up for success.
 
-Dashboard:
+Get started:
+• Finish your coach profile (specialties, certifications, and a clear bio)
+• Add pricing and the services you offer
+• Set availability and preferred training locations
+• Enable notifications so you never miss a request
+
+Go to your dashboard:
 {dto.DashboardUrl}
 
-Questions? Reply to this email — we’re here to help.
+We’re here to help — reply to this email if you need assistance.
 
 {EmailText.Footer}";
-        await _sender.SendAsync(dto.To, subject, null, text, ct,
-            headers: FlowHeaders("welcome"),
-            tags: Tags(("flow", "welcome")),
-            fromOverride: _smtp.FromAddresses.Welcome);
+        await _sender.SendAsync(
+            to: dto.To,
+            subject: subject,
+            htmlBody: null,
+            textBody: text,
+            ct: ct,
+            headers: FlowHeaders("welcome-coach"),
+            tags: Tags(("role", "coach"), ("flow", "welcome-coach")),
+            fromOverride: _smtp.FromAddresses.Welcome
+        );
         return Ok(new { sent = true });
     }
 
-    // ── Reset password
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Welcome (CLIENT) — optional dedicated endpoint
+    // ─────────────────────────────────────────────────────────────────────────────
+    [HttpPost("welcome-client")]
+    public async Task<IActionResult> WelcomeClient([FromBody] WelcomeEmailDto dto, CancellationToken ct)
+    {
+        var subject = $"Welcome to PTfinderNow, {dto.FirstName}";
+        var text =
+$@"Hi {dto.FirstName},
+
+Welcome to PTfinderNow.
+
+What you can do next:
+• Explore verified coaches and training specialties
+• Send a booking request that fits your schedule
+• Manage your sessions and messages in your dashboard
+
+Open your dashboard:
+{dto.DashboardUrl}
+
+Questions? Reply to this email and we’ll help you out.
+
+{EmailText.Footer}";
+        await _sender.SendAsync(
+            to: dto.To,
+            subject: subject,
+            htmlBody: null,
+            textBody: text,
+            ct: ct,
+            headers: FlowHeaders("welcome-client"),
+            tags: Tags(("role", "client"), ("flow", "welcome-client")),
+            fromOverride: _smtp.FromAddresses.Welcome
+        );
+        return Ok(new { sent = true });
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Reset password
+    // ─────────────────────────────────────────────────────────────────────────────
     [HttpPost("reset-password")]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordEmailDto dto, CancellationToken ct)
     {
-        var subject = "Reset your PTfinderNow password";
+        var subject = "Reset your password — PTfinderNow";
         var text =
 $@"We received a request to reset your PTfinderNow password for {dto.Email}.
 
 Reset your password:
 {dto.ResetLink}
 
-This link expires in {dto.ExpiresMinutes} minutes.
-If you didn’t request a reset, ignore this — your account is still secure.
+This link expires in {dto.ExpiresMinutes} minutes. If you didn’t request a reset, you can ignore this email.
 
 {EmailText.Footer}";
-        await _sender.SendAsync(dto.To, subject, null, text, ct,
+        await _sender.SendAsync(
+            to: dto.To,
+            subject: subject,
+            htmlBody: null,
+            textBody: text,
+            ct: ct,
             headers: FlowHeaders("reset-password"),
             tags: Tags(("flow", "reset-password")),
-            fromOverride: _smtp.FromAddresses.Default);
+            fromOverride: _smtp.FromAddresses.Default
+        );
         return Ok(new { sent = true });
     }
 
-    // ── Booking: request → PT
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Booking: request → PT (coach)
+    // ─────────────────────────────────────────────────────────────────────────────
     [HttpPost("booking/request-pt")]
     public async Task<IActionResult> BookingRequestPt([FromBody] BookingRequestPtEmailDto dto, CancellationToken ct)
     {
-        var subject = $"New booking request from {dto.ClientName} — {dto.ServiceName}";
+        var subject = $"New booking request — {dto.ServiceName} from {dto.ClientName}";
         var when = $"{dto.StartsAtLocal:yyyy-MM-dd HH:mm} ({dto.Timezone})";
         var text =
 $@"You have a new booking request.
@@ -177,14 +293,22 @@ Decline: {dto.DeclineUrl}
 Please respond within {dto.ResponseSlaHours} hours.
 
 {EmailText.Footer}";
-        await _sender.SendAsync(dto.To, subject, null, text, ct,
+        await _sender.SendAsync(
+            to: dto.To,
+            subject: subject,
+            htmlBody: null,
+            textBody: text,
+            ct: ct,
             headers: FlowHeaders("booking-request-pt"),
             tags: Tags(("flow", "booking-request-pt")),
-            fromOverride: _smtp.FromAddresses.Booking);
+            fromOverride: _smtp.FromAddresses.Booking
+        );
         return Ok(new { sent = true });
     }
 
-    // ── Booking: request acknowledgement → Client
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Booking: request acknowledgement → Client
+    // ─────────────────────────────────────────────────────────────────────────────
     [HttpPost("booking/request-client")]
     public async Task<IActionResult> BookingRequestClient([FromBody] BookingRequestClientEmailDto dto, CancellationToken ct)
     {
@@ -194,22 +318,30 @@ Please respond within {dto.ResponseSlaHours} hours.
 $@"Your booking request has been sent to {dto.PtName}.
 
 Service: {dto.ServiceName}
-Date/Time: {when}
+Requested time: {when}
 Location: {dto.Location}
 
 We’ll email you as soon as {dto.PtName} confirms or proposes a new time.
-You can manage your request here:
+Manage your request:
 {dto.ManageUrl}
 
 {EmailText.Footer}";
-        await _sender.SendAsync(dto.To, subject, null, text, ct,
+        await _sender.SendAsync(
+            to: dto.To,
+            subject: subject,
+            htmlBody: null,
+            textBody: text,
+            ct: ct,
             headers: FlowHeaders("booking-request-client"),
             tags: Tags(("flow", "booking-request-client")),
-            fromOverride: _smtp.FromAddresses.Booking);
+            fromOverride: _smtp.FromAddresses.Booking
+        );
         return Ok(new { sent = true });
     }
 
-    // ── Booking: confirmed by PT → notify Client (attach .ics)
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Booking: confirmed by PT → notify Client (optional .ics)
+    // ─────────────────────────────────────────────────────────────────────────────
     [HttpPost("booking/confirmed-client")]
     public async Task<IActionResult> BookingConfirmedClient([FromBody] BookingConfirmedClientEmailDto dto, CancellationToken ct)
     {
@@ -245,19 +377,27 @@ Manage your booking:
             atts = new[] { ics };
         }
 
-        await _sender.SendAsync(dto.To, subject, null, text, ct,
+        await _sender.SendAsync(
+            to: dto.To,
+            subject: subject,
+            htmlBody: null,
+            textBody: text,
+            ct: ct,
             headers: FlowHeaders("booking-confirmed-client"),
             attachments: atts,
             tags: Tags(("flow", "booking-confirmed-client")),
-            fromOverride: _smtp.FromAddresses.Booking);
+            fromOverride: _smtp.FromAddresses.Booking
+        );
         return Ok(new { sent = true });
     }
 
-    // ── Booking: confirmation receipt → PT
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Booking: confirmation receipt → PT
+    // ─────────────────────────────────────────────────────────────────────────────
     [HttpPost("booking/confirmed-pt")]
     public async Task<IActionResult> BookingConfirmedPt([FromBody] BookingConfirmedPtEmailDto dto, CancellationToken ct)
     {
-        var subject = $"You confirmed a booking with {dto.ClientName} — {dto.ServiceName}";
+        var subject = $"You confirmed a booking — {dto.ServiceName} for {dto.ClientName}";
         var when = $"{dto.StartsAtLocal:yyyy-MM-dd HH:mm} ({dto.Timezone})";
         var text =
 $@"Thanks for confirming.
@@ -270,39 +410,55 @@ Duration: {dto.DurationMinutes} minutes
 Price: {dto.Price}
 
 {EmailText.Footer}";
-        await _sender.SendAsync(dto.To, subject, null, text, ct,
+        await _sender.SendAsync(
+            to: dto.To,
+            subject: subject,
+            htmlBody: null,
+            textBody: text,
+            ct: ct,
             headers: FlowHeaders("booking-confirmed-pt"),
             tags: Tags(("flow", "booking-confirmed-pt")),
-            fromOverride: _smtp.FromAddresses.Booking);
+            fromOverride: _smtp.FromAddresses.Booking
+        );
         return Ok(new { sent = true });
     }
 
-    // ── Booking: cancelled by PT (after confirmation)
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Booking: cancelled by PT (after confirmation)
+    // ─────────────────────────────────────────────────────────────────────────────
     [HttpPost("booking/cancelled-by-pt")]
     public async Task<IActionResult> BookingCancelledByPt([FromBody] BookingCancelledByPtEmailDto dto, CancellationToken ct)
     {
         var subject = $"Booking cancelled by {dto.PtName} — {dto.ServiceName}";
         var when = $"{dto.StartsAtLocal:yyyy-MM-dd HH:mm} ({dto.Timezone})";
         var text =
-$@"Your booking was cancelled by {dto.PtName}.
+$@"Your confirmed booking was cancelled by {dto.PtName}.
 
 Service: {dto.ServiceName}
 Original date/time: {when}
 Location: {dto.Location}
 Reason: {dto.Reason}
 
-Find another coach:
+Find another coach or reschedule:
 {dto.SearchUrl}
 
 {EmailText.Footer}";
-        await _sender.SendAsync(dto.To, subject, null, text, ct,
+        await _sender.SendAsync(
+            to: dto.To,
+            subject: subject,
+            htmlBody: null,
+            textBody: text,
+            ct: ct,
             headers: FlowHeaders("booking-cancelled-by-pt"),
             tags: Tags(("flow", "booking-cancelled-by-pt")),
-            fromOverride: _smtp.FromAddresses.Booking);
+            fromOverride: _smtp.FromAddresses.Booking
+        );
         return Ok(new { sent = true });
     }
 
-    // ── Booking: request declined by PT (before confirmation)
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Booking: request declined by PT (before confirmation)
+    // ─────────────────────────────────────────────────────────────────────────────
     [HttpPost("booking/declined-by-pt")]
     public async Task<IActionResult> BookingDeclinedByPt([FromBody] BookingCancelledByPtEmailDto dto, CancellationToken ct)
     {
@@ -316,14 +472,20 @@ Requested time: {when}
 Location: {dto.Location}
 Reason: {dto.Reason}
 
-Find another coach or try a different time:
+You can try a different time or search for another coach:
 {dto.SearchUrl}
 
 {EmailText.Footer}";
-        await _sender.SendAsync(dto.To, subject, null, text, ct,
+        await _sender.SendAsync(
+            to: dto.To,
+            subject: subject,
+            htmlBody: null,
+            textBody: text,
+            ct: ct,
             headers: FlowHeaders("booking-declined-by-pt"),
             tags: Tags(("flow", "booking-declined-by-pt")),
-            fromOverride: _smtp.FromAddresses.Booking);
+            fromOverride: _smtp.FromAddresses.Booking
+        );
         return Ok(new { sent = true });
     }
 }

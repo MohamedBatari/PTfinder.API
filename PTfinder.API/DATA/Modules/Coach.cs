@@ -32,6 +32,10 @@ namespace PTfinder.API.DATA.Modules
 
         public string ProfileImage { get; set; }
 
+        public bool EmailVerified { get; set; } = false;
+        public string? EmailVerificationToken { get; set; }
+        public DateTime? EmailVerificationExpiresUtc { get; set; }
+
         public List<Availability> Availabilities { get; set; }
         public List<Booking> Bookings { get; set; }
         public ICollection<Review> Reviews { get; set; }
