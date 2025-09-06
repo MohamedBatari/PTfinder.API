@@ -1,5 +1,4 @@
-﻿using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using PTfinder.API.DATA.Modules;
 using PTfinder.API.DATA;
@@ -25,11 +24,28 @@ namespace PTfinder.API.Controllers
         [HttpPost("login")]
         public IActionResult Login([FromBody] LoginRequest request)
         {
-            var coach = _context.Coaches.SingleOrDefault(c => c.Email == request.Email);
+            // basic null/trim normalization
+            var email = (request?.Email ?? string.Empty).Trim();
+            var password = request?.Password ?? string.Empty;
 
-            if (coach == null || coach.Password != request.Password)
+            var coach = _context.Coaches.SingleOrDefault(c => c.Email == email);
+
+            // Invalid email or password (your current implementation uses plain-text compare)
+            if (coach == null || coach.Password != password)
             {
                 return Unauthorized(new { message = "Invalid email or password" });
+            }
+
+            // 🔒 Enforce email verification before issuing a JWT
+            // Make sure your Coach entity has: bool EmailVerified { get; set; }
+            if (!coach.EmailVerified)
+            {
+                // Frontend should show a message and call POST /api/auth/request-verification { email }
+                return StatusCode(403, new
+                {
+                    error = "Email not verified",
+                    code = "email_not_verified"
+                });
             }
 
             var token = GenerateJwtToken(coach);
@@ -37,7 +53,7 @@ namespace PTfinder.API.Controllers
             return Ok(new
             {
                 token,
-                coachId = coach.Id  
+                coachId = coach.Id
             });
         }
 
@@ -48,20 +64,22 @@ namespace PTfinder.API.Controllers
 
             var claims = new[]
             {
-            new Claim(ClaimTypes.Email, coach.Email),
-            new Claim("CoachId", coach.Id.ToString())  
-        };
+                new Claim(ClaimTypes.Email, coach.Email),
+                new Claim("CoachId", coach.Id.ToString())
+            };
 
             var tokenDescriptor = new SecurityTokenDescriptor
             {
                 Subject = new ClaimsIdentity(claims),
                 Expires = DateTime.UtcNow.AddHours(1),
-                SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
+                SigningCredentials = new SigningCredentials(
+                    new SymmetricSecurityKey(key),
+                    SecurityAlgorithms.HmacSha256Signature
+                )
             };
 
             var token = tokenHandler.CreateToken(tokenDescriptor);
             return tokenHandler.WriteToken(token);
         }
     }
-
 }
