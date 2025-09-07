@@ -254,8 +254,8 @@ namespace PTfinder.API.Migrations
 
                     b.Property<string>("Email")
                         .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)");
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
 
                     b.Property<DateTime>("ExpiresUtc")
                         .HasColumnType("datetime2");
@@ -387,7 +387,7 @@ namespace PTfinder.API.Migrations
                     b.HasOne("PTfinder.API.DATA.Modules.City", "City")
                         .WithMany("Areas")
                         .HasForeignKey("CityId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("City");
@@ -398,7 +398,7 @@ namespace PTfinder.API.Migrations
                     b.HasOne("PTfinder.API.DATA.Modules.Coach", "Coach")
                         .WithMany("Availabilities")
                         .HasForeignKey("CoachId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("Coach");
@@ -409,7 +409,7 @@ namespace PTfinder.API.Migrations
                     b.HasOne("PTfinder.API.DATA.Modules.Coach", "Coach")
                         .WithMany("Bookings")
                         .HasForeignKey("CoachId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("Coach");
@@ -420,7 +420,7 @@ namespace PTfinder.API.Migrations
                     b.HasOne("PTfinder.API.DATA.Modules.Country", "Country")
                         .WithMany("Cities")
                         .HasForeignKey("CountryId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("Country");
@@ -431,31 +431,31 @@ namespace PTfinder.API.Migrations
                     b.HasOne("PTfinder.API.DATA.Modules.Area", "Area")
                         .WithMany()
                         .HasForeignKey("AreaId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
 
                     b.HasOne("PTfinder.API.DATA.Modules.Category", "Category")
                         .WithMany("Coaches")
                         .HasForeignKey("CategoryId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
 
                     b.HasOne("PTfinder.API.DATA.Modules.City", "City")
                         .WithMany()
                         .HasForeignKey("CityId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
 
                     b.HasOne("PTfinder.API.DATA.Modules.Country", "Country")
                         .WithMany()
                         .HasForeignKey("CountryId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
 
                     b.HasOne("PTfinder.API.DATA.Modules.Speciality", "Speciality")
                         .WithMany("Coaches")
                         .HasForeignKey("SpecialityId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
 
                     b.Navigation("Area");
@@ -474,7 +474,7 @@ namespace PTfinder.API.Migrations
                     b.HasOne("PTfinder.API.DATA.Modules.Coach", "Coach")
                         .WithMany("GalleryMedia")
                         .HasForeignKey("CoachId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("Coach");
@@ -485,7 +485,7 @@ namespace PTfinder.API.Migrations
                     b.HasOne("PTfinder.API.DATA.Modules.Coach", "Coach")
                         .WithMany("Reviews")
                         .HasForeignKey("CoachId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("Coach");
@@ -496,7 +496,7 @@ namespace PTfinder.API.Migrations
                     b.HasOne("PTfinder.API.DATA.Modules.Category", "Category")
                         .WithMany("Specialities")
                         .HasForeignKey("CategoryId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("Category");
@@ -507,7 +507,7 @@ namespace PTfinder.API.Migrations
                     b.HasOne("PTfinder.API.DATA.Modules.Coach", "Coach")
                         .WithMany("Subscriptions")
                         .HasForeignKey("CoachId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("Coach");
