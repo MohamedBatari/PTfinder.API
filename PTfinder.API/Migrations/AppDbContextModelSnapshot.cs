@@ -244,6 +244,40 @@ namespace PTfinder.API.Migrations
                     b.ToTable("Countries");
                 });
 
+            modelBuilder.Entity("PTfinder.API.DATA.Modules.EmailVerification", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<DateTime>("ExpiresUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime?>("UsedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Email");
+
+                    b.HasIndex("Token")
+                        .IsUnique();
+
+                    b.ToTable("EmailVerifications");
+                });
+
             modelBuilder.Entity("PTfinder.API.DATA.Modules.GalleryMedia", b =>
                 {
                     b.Property<int>("Id")

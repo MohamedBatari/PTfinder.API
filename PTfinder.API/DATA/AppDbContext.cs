@@ -19,8 +19,10 @@ namespace PTfinder.API.DATA
         public DbSet<Area> Areas { get; set; }
         public DbSet<GalleryMedia> GalleryMedia { get; set; }
 
+        public DbSet<EmailVerification> EmailVerifications => Set<EmailVerification>();
 
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder )
         {
             modelBuilder.Entity<Category>()
                 .HasMany(c => c.Specialities)
@@ -52,6 +54,14 @@ namespace PTfinder.API.DATA
                 .HasPrecision(10, 2);
 
             base.OnModelCreating(modelBuilder);
+
+            modelBuilder.Entity<EmailVerification>()
+            .HasIndex(x => x.Email)
+            .IsUnique(false);
+
+            modelBuilder.Entity<EmailVerification>()
+                .HasIndex(x => x.Token)
+                .IsUnique(true);
 
             foreach (var relationship in modelBuilder.Model.GetEntityTypes()
                 .SelectMany(e => e.GetForeignKeys()))
