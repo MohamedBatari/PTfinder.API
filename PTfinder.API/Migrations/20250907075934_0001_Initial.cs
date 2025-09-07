@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace PTfinder.API.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialSql : Migration
+    public partial class _0001_Initial : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -38,6 +38,22 @@ namespace PTfinder.API.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "EmailVerifications",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    Email = table.Column<string>(type: "nvarchar(320)", maxLength: 320, nullable: false),
+                    Token = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
+                    ExpiresUtc = table.Column<DateTime>(type: "datetime2", nullable: false),
+                    UsedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_EmailVerifications", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "Specialities",
                 columns: table => new
                 {
@@ -54,7 +70,7 @@ namespace PTfinder.API.Migrations
                         column: x => x.CategoryId,
                         principalTable: "Categories",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -74,7 +90,7 @@ namespace PTfinder.API.Migrations
                         column: x => x.CountryId,
                         principalTable: "Countries",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -94,7 +110,7 @@ namespace PTfinder.API.Migrations
                         column: x => x.CityId,
                         principalTable: "Cities",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -115,7 +131,10 @@ namespace PTfinder.API.Migrations
                     AreaId = table.Column<int>(type: "int", nullable: false),
                     CategoryId = table.Column<int>(type: "int", nullable: false),
                     SpecialityId = table.Column<int>(type: "int", nullable: false),
-                    ProfileImage = table.Column<string>(type: "nvarchar(max)", nullable: false)
+                    ProfileImage = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    EmailVerified = table.Column<bool>(type: "bit", nullable: false),
+                    EmailVerificationToken = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    EmailVerificationExpiresUtc = table.Column<DateTime>(type: "datetime2", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -124,32 +143,27 @@ namespace PTfinder.API.Migrations
                         name: "FK_Coaches_Areas_AreaId",
                         column: x => x.AreaId,
                         principalTable: "Areas",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_Coaches_Categories_CategoryId",
                         column: x => x.CategoryId,
                         principalTable: "Categories",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_Coaches_Cities_CityId",
                         column: x => x.CityId,
                         principalTable: "Cities",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_Coaches_Countries_CountryId",
                         column: x => x.CountryId,
                         principalTable: "Countries",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_Coaches_Specialities_SpecialityId",
                         column: x => x.SpecialityId,
                         principalTable: "Specialities",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -170,7 +184,7 @@ namespace PTfinder.API.Migrations
                         column: x => x.CoachId,
                         principalTable: "Coaches",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -195,7 +209,7 @@ namespace PTfinder.API.Migrations
                         column: x => x.CoachId,
                         principalTable: "Coaches",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -216,7 +230,7 @@ namespace PTfinder.API.Migrations
                         column: x => x.CoachId,
                         principalTable: "Coaches",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -238,7 +252,7 @@ namespace PTfinder.API.Migrations
                         column: x => x.CoachId,
                         principalTable: "Coaches",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -260,7 +274,7 @@ namespace PTfinder.API.Migrations
                         column: x => x.CoachId,
                         principalTable: "Coaches",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateIndex(
@@ -309,6 +323,17 @@ namespace PTfinder.API.Migrations
                 column: "SpecialityId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_EmailVerifications_Email",
+                table: "EmailVerifications",
+                column: "Email");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_EmailVerifications_Token",
+                table: "EmailVerifications",
+                column: "Token",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
                 name: "IX_GalleryMedia_CoachId",
                 table: "GalleryMedia",
                 column: "CoachId");
@@ -337,6 +362,9 @@ namespace PTfinder.API.Migrations
 
             migrationBuilder.DropTable(
                 name: "Bookings");
+
+            migrationBuilder.DropTable(
+                name: "EmailVerifications");
 
             migrationBuilder.DropTable(
                 name: "GalleryMedia");
