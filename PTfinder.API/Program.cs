@@ -13,17 +13,18 @@ using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Load .env (optional; user-secrets/appsettings still override)
+// Load .env (optional)
 Env.Load();
 
-// ===== CORS: allow your sites =====
+// ===== Allowed Origins =====
 var allowedOrigins = new[]
 {
     "https://ptfindernow.com",
     "https://www.ptfindernow.com",
-    "http://localhost:3000"
+    "http://localhost:3000",
 };
 
+// ===== CORS (policy) =====
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReactApp", policy =>
@@ -32,8 +33,9 @@ builder.Services.AddCors(options =>
             .WithOrigins(allowedOrigins)
             .SetIsOriginAllowedToAllowWildcardSubdomains()
             .AllowAnyHeader()
-            .AllowAnyMethod();
-        // NOTE: Don't call AllowCredentials() unless you actually use cookies.
+            .AllowAnyMethod()
+            .SetPreflightMaxAge(TimeSpan.FromHours(12));
+        // Only add .AllowCredentials() if you actually use cookies on the frontend.
     });
 });
 
@@ -43,9 +45,9 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 // ===== Controllers & JSON =====
 builder.Services.AddControllers()
-    .AddJsonOptions(options =>
+    .AddJsonOptions(opts =>
     {
-        options.JsonSerializerOptions.ReferenceHandler =
+        opts.JsonSerializerOptions.ReferenceHandler =
             System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
     });
 
@@ -53,9 +55,9 @@ builder.Services.AddControllers()
 builder.Services.AddSingleton<BlobStorageService>();
 
 // ===== API behavior =====
-builder.Services.Configure<ApiBehaviorOptions>(options =>
+builder.Services.Configure<ApiBehaviorOptions>(o =>
 {
-    options.SuppressModelStateInvalidFilter = true;
+    o.SuppressModelStateInvalidFilter = true;
 });
 
 // ===== Swagger =====
@@ -90,14 +92,39 @@ builder.Services.AddAuthentication(options =>
 
 var app = builder.Build();
 
-// ===== Apply EF migrations at startup =====
+// ===== CORS MUST BE FIRST in the pipeline =====
+app.UseCors("AllowReactApp");
+
+// (Optional) short-circuit raw OPTIONS so preflight always gets headers
+app.Use(async (ctx, next) =>
+{
+    if (string.Equals(ctx.Request.Method, "OPTIONS", StringComparison.OrdinalIgnoreCase))
+    {
+        var origin = ctx.Request.Headers["Origin"].ToString();
+        if (!string.IsNullOrEmpty(origin) && allowedOrigins.Contains(origin))
+        {
+            ctx.Response.Headers["Access-Control-Allow-Origin"] = origin;
+            ctx.Response.Headers["Vary"] = "Origin";
+            ctx.Response.Headers["Access-Control-Allow-Methods"] =
+                ctx.Request.Headers["Access-Control-Request-Method"].ToString() ?? "GET,POST,PUT,DELETE,OPTIONS";
+            ctx.Response.Headers["Access-Control-Allow-Headers"] =
+                ctx.Request.Headers["Access-Control-Request-Headers"].ToString() ?? "*";
+            // ctx.Response.Headers["Access-Control-Allow-Credentials"] = "true"; // only if you enabled credentials
+        }
+        ctx.Response.StatusCode = StatusCodes.Status204NoContent;
+        return;
+    }
+    await next();
+});
+
+// ===== EF migrations at startup =====
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.Migrate();
 }
 
-// ===== Global exception handler (adds CORS headers on errors too) =====
+// ===== Global exception handler (echo CORS on errors) =====
 app.UseExceptionHandler(errorApp =>
 {
     errorApp.Run(async context =>
@@ -105,14 +132,11 @@ app.UseExceptionHandler(errorApp =>
         context.Response.StatusCode = 500;
         context.Response.ContentType = "application/json";
 
-        // Reflect CORS so the browser can read the error body
         var origin = context.Request.Headers["Origin"].ToString();
         if (!string.IsNullOrEmpty(origin) && allowedOrigins.Contains(origin))
         {
             context.Response.Headers["Access-Control-Allow-Origin"] = origin;
             context.Response.Headers["Vary"] = "Origin";
-            // Only add Allow-Credentials if you enabled it in the policy
-            // context.Response.Headers["Access-Control-Allow-Credentials"] = "true";
         }
 
         var err = context.Features.Get<IExceptionHandlerFeature>()?.Error?.Message ?? "Unhandled server error";
@@ -120,7 +144,7 @@ app.UseExceptionHandler(errorApp =>
     });
 });
 
-// ===== Swagger in Development =====
+// Swagger in Development
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -128,23 +152,14 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
-// CORS MUST run early to catch preflights
-app.UseCors("AllowReactApp");
-
 app.UseAuthentication();
 app.UseAuthorization();
-
 app.UseStaticFiles();
 
-// Handle preflight OPTIONS for any API route (so browser gets CORS headers)
-app.MapMethods("/api/{**path}", new[] { "OPTIONS" }, () => Results.NoContent())
-   .RequireCors("AllowReactApp");
+// Map controllers (CORS already applied globally via UseCors)
+app.MapControllers();
 
-// Controllers
-app.MapControllers().RequireCors("AllowReactApp");
-
-// (Optional) quick health ping
+// Health
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
 app.Run();
