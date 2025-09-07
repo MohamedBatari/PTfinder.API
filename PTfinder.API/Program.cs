@@ -1,24 +1,47 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using PTfinder.API.DATA;
-using DotNetEnv;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+
+using DotNetEnv;
+using PTfinder.API.DATA;
 using PTfinder.API.Services;
-using Microsoft.Extensions.Options;
 using PTfinder.API.Settings;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Load .env (optional; user-secrets/appsettings still override)
 Env.Load();
 
-// DbContext
+// ===== CORS: allow your sites =====
+var allowedOrigins = new[]
+{
+    "https://ptfindernow.com",
+    "https://www.ptfindernow.com",
+    "http://localhost:3000"
+};
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowReactApp", policy =>
+    {
+        policy
+            .WithOrigins(allowedOrigins)
+            .SetIsOriginAllowedToAllowWildcardSubdomains()
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+        // NOTE: Don't call AllowCredentials() unless you actually use cookies.
+    });
+});
+
+// ===== DbContext =====
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("mycon")));
 
-// Controllers & JSON
+// ===== Controllers & JSON =====
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
@@ -26,41 +49,25 @@ builder.Services.AddControllers()
             System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
     });
 
-// Other services
+// ===== Other services =====
 builder.Services.AddSingleton<BlobStorageService>();
 
-// API behavior
+// ===== API behavior =====
 builder.Services.Configure<ApiBehaviorOptions>(options =>
 {
     options.SuppressModelStateInvalidFilter = true;
 });
 
-// Swagger
+// ===== Swagger =====
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// CORS
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowReactApp", policyBuilder =>
-    {
-        policyBuilder
-            .WithOrigins(
-                "https://ptfindernow.com",
-                "https://www.ptfindernow.com",
-                "http://localhost:3000")
-            .AllowAnyHeader()
-            .AllowAnyMethod();
-    });
-});
-
-// SMTP settings + email sender
+// ===== SMTP settings + email sender =====
 builder.Services.Configure<SmtpSettings>(builder.Configuration.GetSection("Smtp"));
-// Expose the bound instance directly for SmtpEmailSender ctor
 builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<SmtpSettings>>().Value);
 builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
 
-// Auth (JWT)
+// ===== Auth (JWT) =====
 var jwtKey = builder.Configuration["Jwt:Key"]
     ?? throw new InvalidOperationException("Missing configuration: Jwt:Key");
 
@@ -83,14 +90,14 @@ builder.Services.AddAuthentication(options =>
 
 var app = builder.Build();
 
-// Apply EF migrations at startup
+// ===== Apply EF migrations at startup =====
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.Migrate();
 }
 
-// Global exception handler (simple JSON)
+// ===== Global exception handler (adds CORS headers on errors too) =====
 app.UseExceptionHandler(errorApp =>
 {
     errorApp.Run(async context =>
@@ -98,15 +105,22 @@ app.UseExceptionHandler(errorApp =>
         context.Response.StatusCode = 500;
         context.Response.ContentType = "application/json";
 
-        var error = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>();
-        if (error != null)
+        // Reflect CORS so the browser can read the error body
+        var origin = context.Request.Headers["Origin"].ToString();
+        if (!string.IsNullOrEmpty(origin) && allowedOrigins.Contains(origin))
         {
-            await context.Response.WriteAsync($"{{\"error\":\"{error.Error.Message}\"}}");
+            context.Response.Headers["Access-Control-Allow-Origin"] = origin;
+            context.Response.Headers["Vary"] = "Origin";
+            // Only add Allow-Credentials if you enabled it in the policy
+            // context.Response.Headers["Access-Control-Allow-Credentials"] = "true";
         }
+
+        var err = context.Features.Get<IExceptionHandlerFeature>()?.Error?.Message ?? "Unhandled server error";
+        await context.Response.WriteAsync($"{{\"error\":\"{err}\"}}");
     });
 });
 
-// Swagger in Development
+// ===== Swagger in Development =====
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -114,6 +128,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+// CORS MUST run early to catch preflights
 app.UseCors("AllowReactApp");
 
 app.UseAuthentication();
@@ -121,9 +137,15 @@ app.UseAuthorization();
 
 app.UseStaticFiles();
 
-app.MapControllers();
+// Handle preflight OPTIONS for any API route (so browser gets CORS headers)
+app.MapMethods("/api/{**path}", new[] { "OPTIONS" }, () => Results.NoContent())
+   .RequireCors("AllowReactApp");
+
+// Controllers
+app.MapControllers().RequireCors("AllowReactApp");
 
 // (Optional) quick health ping
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
 app.Run();
+
