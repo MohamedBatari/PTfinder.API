@@ -173,6 +173,9 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
+app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+
+
 // ===== Global exception handler (echo CORS on errors) =====
 app.UseExceptionHandler(errorApp =>
 {
