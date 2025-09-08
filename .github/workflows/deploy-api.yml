@@ -3,10 +3,17 @@ name: Deploy PTfinder API
 on:
   push:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+
+    env:
+      ConnectionStrings__mycon: ${{ secrets.AZURE_SQL_CONNECTIONSTRING }}
+      Jwt__Key: ${{ secrets.JWT_KEY }}
+      AzureStorage__ConnectionString: ${{ secrets.AZURE_STORAGE_CONNECTIONSTRING }}
+      Smtp__Pass: ${{ secrets.SMTP_PASS }}
 
     steps:
       - name: Checkout
@@ -15,7 +22,7 @@ jobs:
       - name: Setup .NET 8
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: 8.0.x
 
       - name: Restore
         run: dotnet restore ./PTfinder.API/PTfinder.API.csproj
@@ -26,9 +33,10 @@ jobs:
       - name: Publish
         run: dotnet publish ./PTfinder.API/PTfinder.API.csproj -c Release -o ./publish --no-restore
 
+
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
-          app-name: ptn-api-webapp
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
           package: ./publish
+
