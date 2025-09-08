@@ -1,24 +1,23 @@
-﻿using Microsoft.AspNetCore.Diagnostics;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
-using Microsoft.Data.SqlClient;
+﻿using System.Diagnostics;
 using System.Text;
-using System.Diagnostics;
-
 using DotNetEnv;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
 using PTfinder.API.DATA;
 using PTfinder.API.Services;
 using PTfinder.API.Settings;
-using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Load .env (optional)
+// ------------ Load .env (optional for local) ------------
 Env.Load();
 
-// ===== Allowed Origins =====
+// ------------ Allowed Origins ------------
 var allowedOrigins = new[]
 {
     "https://ptfindernow.com",
@@ -26,7 +25,7 @@ var allowedOrigins = new[]
     "http://localhost:3000",
 };
 
-// ===== CORS (policy) =====
+// ------------ CORS policy ------------
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReactApp", policy =>
@@ -37,15 +36,15 @@ builder.Services.AddCors(options =>
             .AllowAnyHeader()
             .AllowAnyMethod()
             .SetPreflightMaxAge(TimeSpan.FromHours(12));
-        // Only add .AllowCredentials() if you use cookies on the frontend.
+        // Only add .AllowCredentials() if you actually use cookies in the browser
     });
 });
 
-// ===== Connection String (fail fast if missing) =====
+// ------------ Connection string (fail fast if missing) ------------
 var cs = builder.Configuration.GetConnectionString("mycon")
          ?? throw new InvalidOperationException("Missing connection string 'mycon'.");
 
-// ===== DbContext (resilient SQL + longer timeout) =====
+// ------------ DbContext (resilient SQL + sensible timeouts) ------------
 builder.Services.AddDbContextPool<AppDbContext>(options =>
     options.UseSqlServer(cs, sql =>
     {
@@ -54,11 +53,11 @@ builder.Services.AddDbContextPool<AppDbContext>(options =>
             maxRetryDelay: TimeSpan.FromSeconds(10),
             errorNumbersToAdd: new[] { 40613, 40197, 40501, 10928, 10929 } // common Azure SQL transient errors
         );
-        sql.CommandTimeout(60); // ride through serverless resume / cold DB
+        sql.CommandTimeout(30); // command timeout (seconds)
     })
 );
 
-// ===== Controllers & JSON =====
+// ------------ Controllers & JSON ------------
 builder.Services.AddControllers()
     .AddJsonOptions(opts =>
     {
@@ -66,25 +65,25 @@ builder.Services.AddControllers()
             System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
     });
 
-// ===== Other services =====
+// ------------ Other app services ------------
 builder.Services.AddSingleton<BlobStorageService>();
 
-// ===== API behavior =====
+// ------------ API behavior tweaks ------------
 builder.Services.Configure<ApiBehaviorOptions>(o =>
 {
     o.SuppressModelStateInvalidFilter = true;
 });
 
-// ===== Swagger =====
+// ------------ Swagger (enabled during bring-up; disable later if you want) ------------
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// ===== SMTP settings + email sender =====
+// ------------ SMTP settings + email sender ------------
 builder.Services.Configure<SmtpSettings>(builder.Configuration.GetSection("Smtp"));
 builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<SmtpSettings>>().Value);
 builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
 
-// ===== Auth (JWT) =====
+// ------------ Auth (JWT) ------------
 var jwtKey = builder.Configuration["Jwt:Key"]
     ?? throw new InvalidOperationException("Missing configuration: Jwt:Key");
 
@@ -105,12 +104,12 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-// (Optional) lightweight health checks (framework-native liveness)
+// ------------ Health checks (framework-native) ------------
 builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 
-// ===== TEMP: log DB target at startup (helps verify 'mycon') =====
+// ------------ Log DB target at startup (helps verify 'mycon') ------------
 try
 {
     var b = new SqlConnectionStringBuilder(cs);
@@ -122,10 +121,34 @@ catch (Exception ex)
     app.Logger.LogError(ex, "Could not parse connection string 'mycon'.");
 }
 
-// ===== CORS MUST BE EARLY in the pipeline =====
-app.UseCors("AllowReactApp");
+// ------------ Global exception handler (echo CORS on errors) ------------
+app.UseExceptionHandler(errorApp =>
+{
+    errorApp.Run(async context =>
+    {
+        context.Response.StatusCode = 500;
+        context.Response.ContentType = "application/json";
 
-// (Optional) short-circuit raw OPTIONS so preflight always gets headers
+        var origin = context.Request.Headers["Origin"].ToString();
+        if (!string.IsNullOrEmpty(origin) && allowedOrigins.Contains(origin))
+        {
+            context.Response.Headers["Access-Control-Allow-Origin"] = origin;
+            context.Response.Headers["Vary"] = "Origin";
+        }
+
+        var err = context.Features.Get<IExceptionHandlerFeature>()?.Error?.Message ?? "Unhandled server error";
+        await context.Response.WriteAsync($"{{\"error\":\"{err}\"}}");
+    });
+});
+
+// ------------ Middleware order (keep this) ------------
+app.UseHttpsRedirection();
+app.UseCors("AllowReactApp");
+app.UseAuthentication();
+app.UseAuthorization();
+app.UseStaticFiles();
+
+// ------------ Optional: short-circuit raw OPTIONS (preflight) ------------
 app.Use(async (ctx, next) =>
 {
     if (string.Equals(ctx.Request.Method, "OPTIONS", StringComparison.OrdinalIgnoreCase))
@@ -147,56 +170,7 @@ app.Use(async (ctx, next) =>
     await next();
 });
 
-// ===== EF migrations at startup (with simple retries to avoid resume races) =====
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    var attempts = 0;
-    while (true)
-    {
-        try
-        {
-            attempts++;
-            db.Database.Migrate();
-            break;
-        }
-        catch (Exception ex) when (attempts < 3)
-        {
-            app.Logger.LogWarning(ex, "Migrate failed (attempt {A}). Retrying...", attempts);
-            await Task.Delay(1000 * attempts);
-        }
-        catch (Exception ex)
-        {
-            app.Logger.LogError(ex, "Migrate failed permanently.");
-            throw;
-        }
-    }
-}
-
-app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
-
-
-// ===== Global exception handler (echo CORS on errors) =====
-app.UseExceptionHandler(errorApp =>
-{
-    errorApp.Run(async context =>
-    {
-        context.Response.StatusCode = 500;
-        context.Response.ContentType = "application/json";
-
-        var origin = context.Request.Headers["Origin"].ToString();
-        if (!string.IsNullOrEmpty(origin) && allowedOrigins.Contains(origin))
-        {
-            context.Response.Headers["Access-Control-Allow-Origin"] = origin;
-            context.Response.Headers["Vary"] = "Origin";
-        }
-
-        var err = context.Features.Get<IExceptionHandlerFeature>()?.Error?.Message ?? "Unhandled server error";
-        await context.Response.WriteAsync($"{{\"error\":\"{err}\"}}");
-    });
-});
-
-// ===== Diagnostics: per-request timing + correlation id =====
+// ------------ Per-request timing + correlation id (nice for logs) ------------
 app.Use(async (ctx, next) =>
 {
     var sw = Stopwatch.StartNew();
@@ -210,28 +184,110 @@ app.Use(async (ctx, next) =>
     }
 });
 
-// Swagger in Development
-if (app.Environment.IsDevelopment())
+// ------------ Swagger UI (enable during bring-up; gate later if desired) ------------
+app.UseSwagger();
+app.UseSwaggerUI(c =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "PTfinder API v1");
+});
+
+// ------------ SAFE auto-migrate (won’t crash app if DB isn’t ready) ------------
+using (var scope = app.Services.CreateScope())
+{
+    try
+    {
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Database.SetCommandTimeout(120); // only for migration run
+        db.Database.Migrate();
+        app.Logger.LogInformation("Migrations applied.");
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogWarning(ex, "Migrate failed; starting app anyway.");
+    }
 }
 
-app.UseHttpsRedirection();
-app.UseAuthentication();
-app.UseAuthorization();
-app.UseStaticFiles();
+// ------------ Liveness & diagnostics endpoints ------------
+app.MapGet("/health", () => Results.Ok(new { status = "ok", t = DateTime.UtcNow }));
 
-// ===== Warm the DB once after startup (reduces first-hit spike) =====
+app.MapHealthChecks("/healthz");
+
+// Config peek (no secrets leaked)
+app.MapGet("/debug/config", (IConfiguration cfg) =>
+{
+    var mycon = cfg.GetConnectionString("mycon") ?? "(null)";
+    var masked = mycon.Replace("Password=", "Password=***");
+    var env = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "(null)";
+    return Results.Ok(new { hasMycon = mycon != "(null)", connectionStringMasked = masked, environment = env });
+});
+
+// DB ping (from inside the running app)
+app.MapGet("/debug/dbping", async (IServiceProvider sp) =>
+{
+    try
+    {
+        var cfg = sp.GetRequiredService<IConfiguration>();
+        var csLocal = cfg.GetConnectionString("mycon") ?? "(null)";
+        using var conn = new Microsoft.Data.SqlClient.SqlConnection(csLocal);
+        await conn.OpenAsync();
+
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT DB_NAME() AS DbName, SUSER_SNAME() AS LoginName;";
+        using var r = await cmd.ExecuteReaderAsync();
+        string dbName = "", login = "";
+        if (await r.ReadAsync()) { dbName = r.GetString(0); login = r.GetString(1); }
+
+        return Results.Ok(new
+        {
+            canConnect = true,
+            dataSource = conn.DataSource,
+            database = conn.Database,
+            login,
+            reportedDb = dbName
+        });
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem(ex.Message);
+    }
+});
+
+// Migrations applied?
+app.MapGet("/debug/migrations", async (AppDbContext db) =>
+{
+    try
+    {
+        var applied = new List<object>();
+        await db.Database.OpenConnectionAsync();
+        using var cmd = db.Database.GetDbConnection().CreateCommand();
+        cmd.CommandText = "IF OBJECT_ID('__EFMigrationsHistory') IS NOT NULL SELECT [MigrationId] FROM __EFMigrationsHistory ORDER BY [MigrationId];";
+        using var rd = await cmd.ExecuteReaderAsync();
+        while (await rd.ReadAsync()) applied.Add(new { MigrationId = rd.GetString(0) });
+        return Results.Ok(new { migrationsApplied = applied });
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem(ex.Message);
+    }
+    finally
+    {
+        await db.Database.CloseConnectionAsync();
+    }
+});
+
+// ------------ Map controllers ------------
+app.MapControllers();
+
+// ------------ Warm the DB once after startup ------------
 app.Lifetime.ApplicationStarted.Register(() =>
 {
     _ = Task.Run(async () =>
     {
         try
         {
-            using var scope = app.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            await db.Database.CanConnectAsync();
+            using var scope2 = app.Services.CreateScope();
+            var db2 = scope2.ServiceProvider.GetRequiredService<AppDbContext>();
+            await db2.Database.CanConnectAsync();
             app.Logger.LogInformation("Warmup DB ping succeeded.");
         }
         catch (Exception ex)
@@ -241,26 +297,5 @@ app.Lifetime.ApplicationStarted.Register(() =>
     });
 });
 
-// ===== Debug DB ping endpoint (safe to keep) =====
-app.MapGet("/debug/dbping", async (AppDbContext db) =>
-{
-    try
-    {
-        var can = await db.Database.CanConnectAsync();
-        var provider = db.Database.ProviderName;
-        return Results.Ok(new { canConnect = can, provider });
-    }
-    catch (Exception ex)
-    {
-        return Results.Problem(ex.Message, statusCode: 500);
-    }
-});
-
-// ===== Liveness endpoints =====
-app.MapGet("/health", () => Results.Ok(new { status = "ok", t = DateTime.UtcNow }));
-app.MapHealthChecks("/healthz");
-
-// Map controllers (CORS already applied globally via UseCors)
-app.MapControllers();
-
 app.Run();
+
