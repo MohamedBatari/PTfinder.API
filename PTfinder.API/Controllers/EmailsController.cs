@@ -19,7 +19,7 @@ public class EmailsController : ControllerBase
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
-    // Shared deliverability headers + tags
+    // Helpers
     // ─────────────────────────────────────────────────────────────────────────────
     private Dictionary<string, string> FlowHeaders(string flow) => new()
     {
@@ -28,7 +28,6 @@ public class EmailsController : ControllerBase
         { "Auto-Submitted", "auto-generated" },
         { "X-Auto-Response-Suppress", "All" },
         { "Feedback-ID", $"ptn-tx:{flow}:ptfindernow" }
-        // If you later use SES config sets via SMTP, keep adding X-SES-CONFIGURATION-SET at the transport.
     };
 
     private static IEnumerable<(string Name, string Value)> Tags(params (string, string)[] xs)
@@ -42,12 +41,24 @@ public class EmailsController : ControllerBase
         return list;
     }
 
+    // pick preferredFrom (Verification/Welcome/Booking/Default), then fall back safely
+    private string? SafeFrom(string? preferredFrom)
+    {
+        var chosen = string.IsNullOrWhiteSpace(preferredFrom)
+            ? _smtp?.FromAddresses?.Default
+            : preferredFrom;
+
+        return string.IsNullOrWhiteSpace(chosen) ? null : chosen;
+    }
+
     // ─────────────────────────────────────────────────────────────────────────────
     // Verification (link)
     // ─────────────────────────────────────────────────────────────────────────────
     [HttpPost("verify-link")]
     public async Task<IActionResult> VerifyLink([FromBody] VerifyLinkEmailDto dto, CancellationToken ct)
     {
+        if (!ModelState.IsValid) return BadRequest(new { error = "Invalid email or parameters." });
+
         var subject = "Verify your email address — PTfinderNow";
         var text =
 $@"Hi {dto.FirstName},
@@ -58,6 +69,7 @@ Please verify your email address to activate your PTfinderNow account:
 This link expires in {dto.ExpiresMinutes} minutes. If you didn’t create an account, you can safely ignore this message.
 
 {EmailText.Footer}";
+
         await _sender.SendAsync(
             to: dto.To,
             subject: subject,
@@ -66,7 +78,7 @@ This link expires in {dto.ExpiresMinutes} minutes. If you didn’t create an acc
             ct: ct,
             headers: FlowHeaders("verify-link"),
             tags: Tags(("flow", "verify-link")),
-            fromOverride: _smtp.FromAddresses.Verification
+            fromOverride: SafeFrom(_smtp?.FromAddresses?.Verification)
         );
         return Ok(new { sent = true });
     }
@@ -77,6 +89,8 @@ This link expires in {dto.ExpiresMinutes} minutes. If you didn’t create an acc
     [HttpPost("verify-otp")]
     public async Task<IActionResult> VerifyOtp([FromBody] VerifyOtpEmailDto dto, CancellationToken ct)
     {
+        if (!ModelState.IsValid) return BadRequest(new { error = "Invalid email or parameters." });
+
         var subject = $"Your verification code: {dto.Code} — PTfinderNow";
         var text =
 $@"Hi {dto.FirstName},
@@ -87,6 +101,7 @@ Use this code to verify your email:
 Do not share this code. It expires in {dto.ExpiresMinutes} minutes. If you didn’t request this, please ignore it.
 
 {EmailText.Footer}";
+
         await _sender.SendAsync(
             to: dto.To,
             subject: subject,
@@ -95,17 +110,19 @@ Do not share this code. It expires in {dto.ExpiresMinutes} minutes. If you didn�
             ct: ct,
             headers: FlowHeaders("verify-otp"),
             tags: Tags(("flow", "verify-otp")),
-            fromOverride: _smtp.FromAddresses.Verification
+            fromOverride: SafeFrom(_smtp?.FromAddresses?.Verification)
         );
         return Ok(new { sent = true });
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
-    // Email verified (generic – used by client or coach if you want one route)
+    // Email verified (generic)
     // ─────────────────────────────────────────────────────────────────────────────
     [HttpPost("email-verified")]
     public async Task<IActionResult> EmailVerified([FromBody] EmailVerifiedEmailDto dto, CancellationToken ct)
     {
+        if (!ModelState.IsValid) return BadRequest(new { error = "Invalid email or parameters." });
+
         var subject = "Email verified — PTfinderNow";
         var text =
 $@"Hi {dto.FirstName},
@@ -118,6 +135,7 @@ You can now access your dashboard:
 If you didn’t request this verification, please let us know by replying to this email.
 
 {EmailText.Footer}";
+
         await _sender.SendAsync(
             to: dto.To,
             subject: subject,
@@ -126,17 +144,19 @@ If you didn’t request this verification, please let us know by replying to thi
             ct: ct,
             headers: FlowHeaders("email-verified"),
             tags: Tags(("flow", "email-verified")),
-            fromOverride: _smtp.FromAddresses.Welcome
+            fromOverride: SafeFrom(_smtp?.FromAddresses?.Welcome)
         );
         return Ok(new { sent = true });
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
-    // Email verified (coach-specific tone)
+    // Email verified (coach-specific)
     // ─────────────────────────────────────────────────────────────────────────────
     [HttpPost("email-verified-coach")]
     public async Task<IActionResult> EmailVerifiedCoach([FromBody] EmailVerifiedEmailDto dto, CancellationToken ct)
     {
+        if (!ModelState.IsValid) return BadRequest(new { error = "Invalid email or parameters." });
+
         var subject = "Email verified — you’re ready to accept bookings";
         var text =
 $@"Hi {dto.FirstName},
@@ -154,6 +174,7 @@ Open your dashboard:
 If you need help at any time, just reply to this email.
 
 {EmailText.Footer}";
+
         await _sender.SendAsync(
             to: dto.To,
             subject: subject,
@@ -162,17 +183,19 @@ If you need help at any time, just reply to this email.
             ct: ct,
             headers: FlowHeaders("email-verified-coach"),
             tags: Tags(("flow", "email-verified-coach")),
-            fromOverride: _smtp.FromAddresses.Welcome
+            fromOverride: SafeFrom(_smtp?.FromAddresses?.Welcome)
         );
         return Ok(new { sent = true });
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
-    // Welcome (COACH) — this replaces the old “browse coaches” wording
+    // Welcome (COACH)
     // ─────────────────────────────────────────────────────────────────────────────
     [HttpPost("welcome")]
     public async Task<IActionResult> WelcomeCoach([FromBody] WelcomeEmailDto dto, CancellationToken ct)
     {
+        if (!ModelState.IsValid) return BadRequest(new { error = "Invalid email or parameters." });
+
         var subject = $"Welcome to PTfinderNow, {dto.FirstName}";
         var text =
 $@"Hi {dto.FirstName},
@@ -191,6 +214,7 @@ Go to your dashboard:
 We’re here to help — reply to this email if you need assistance.
 
 {EmailText.Footer}";
+
         await _sender.SendAsync(
             to: dto.To,
             subject: subject,
@@ -199,17 +223,19 @@ We’re here to help — reply to this email if you need assistance.
             ct: ct,
             headers: FlowHeaders("welcome-coach"),
             tags: Tags(("role", "coach"), ("flow", "welcome-coach")),
-            fromOverride: _smtp.FromAddresses.Welcome
+            fromOverride: SafeFrom(_smtp?.FromAddresses?.Welcome)
         );
         return Ok(new { sent = true });
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
-    // Welcome (CLIENT) — optional dedicated endpoint
+    // Welcome (CLIENT)
     // ─────────────────────────────────────────────────────────────────────────────
     [HttpPost("welcome-client")]
     public async Task<IActionResult> WelcomeClient([FromBody] WelcomeEmailDto dto, CancellationToken ct)
     {
+        if (!ModelState.IsValid) return BadRequest(new { error = "Invalid email or parameters." });
+
         var subject = $"Welcome to PTfinderNow, {dto.FirstName}";
         var text =
 $@"Hi {dto.FirstName},
@@ -227,6 +253,7 @@ Open your dashboard:
 Questions? Reply to this email and we’ll help you out.
 
 {EmailText.Footer}";
+
         await _sender.SendAsync(
             to: dto.To,
             subject: subject,
@@ -235,7 +262,7 @@ Questions? Reply to this email and we’ll help you out.
             ct: ct,
             headers: FlowHeaders("welcome-client"),
             tags: Tags(("role", "client"), ("flow", "welcome-client")),
-            fromOverride: _smtp.FromAddresses.Welcome
+            fromOverride: SafeFrom(_smtp?.FromAddresses?.Welcome)
         );
         return Ok(new { sent = true });
     }
@@ -246,6 +273,8 @@ Questions? Reply to this email and we’ll help you out.
     [HttpPost("reset-password")]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordEmailDto dto, CancellationToken ct)
     {
+        if (!ModelState.IsValid) return BadRequest(new { error = "Invalid email or parameters." });
+
         var subject = "Reset your password — PTfinderNow";
         var text =
 $@"We received a request to reset your PTfinderNow password for {dto.Email}.
@@ -256,6 +285,7 @@ Reset your password:
 This link expires in {dto.ExpiresMinutes} minutes. If you didn’t request a reset, you can ignore this email.
 
 {EmailText.Footer}";
+
         await _sender.SendAsync(
             to: dto.To,
             subject: subject,
@@ -264,7 +294,7 @@ This link expires in {dto.ExpiresMinutes} minutes. If you didn’t request a res
             ct: ct,
             headers: FlowHeaders("reset-password"),
             tags: Tags(("flow", "reset-password")),
-            fromOverride: _smtp.FromAddresses.Default
+            fromOverride: SafeFrom(_smtp?.FromAddresses?.Default)
         );
         return Ok(new { sent = true });
     }
@@ -275,6 +305,8 @@ This link expires in {dto.ExpiresMinutes} minutes. If you didn’t request a res
     [HttpPost("booking/request-pt")]
     public async Task<IActionResult> BookingRequestPt([FromBody] BookingRequestPtEmailDto dto, CancellationToken ct)
     {
+        if (!ModelState.IsValid) return BadRequest(new { error = "Invalid email or parameters." });
+
         var subject = $"New booking request — {dto.ServiceName} from {dto.ClientName}";
         var when = $"{dto.StartsAtLocal:yyyy-MM-dd HH:mm} ({dto.Timezone})";
         var text =
@@ -293,6 +325,7 @@ Decline: {dto.DeclineUrl}
 Please respond within {dto.ResponseSlaHours} hours.
 
 {EmailText.Footer}";
+
         await _sender.SendAsync(
             to: dto.To,
             subject: subject,
@@ -301,7 +334,7 @@ Please respond within {dto.ResponseSlaHours} hours.
             ct: ct,
             headers: FlowHeaders("booking-request-pt"),
             tags: Tags(("flow", "booking-request-pt")),
-            fromOverride: _smtp.FromAddresses.Booking
+            fromOverride: SafeFrom(_smtp?.FromAddresses?.Booking)
         );
         return Ok(new { sent = true });
     }
@@ -312,6 +345,8 @@ Please respond within {dto.ResponseSlaHours} hours.
     [HttpPost("booking/request-client")]
     public async Task<IActionResult> BookingRequestClient([FromBody] BookingRequestClientEmailDto dto, CancellationToken ct)
     {
+        if (!ModelState.IsValid) return BadRequest(new { error = "Invalid email or parameters." });
+
         var subject = $"We sent your request to {dto.PtName} — {dto.ServiceName}";
         var when = $"{dto.StartsAtLocal:yyyy-MM-dd HH:mm} ({dto.Timezone})";
         var text =
@@ -326,6 +361,7 @@ Manage your request:
 {dto.ManageUrl}
 
 {EmailText.Footer}";
+
         await _sender.SendAsync(
             to: dto.To,
             subject: subject,
@@ -334,7 +370,7 @@ Manage your request:
             ct: ct,
             headers: FlowHeaders("booking-request-client"),
             tags: Tags(("flow", "booking-request-client")),
-            fromOverride: _smtp.FromAddresses.Booking
+            fromOverride: SafeFrom(_smtp?.FromAddresses?.Booking)
         );
         return Ok(new { sent = true });
     }
@@ -345,6 +381,8 @@ Manage your request:
     [HttpPost("booking/confirmed-client")]
     public async Task<IActionResult> BookingConfirmedClient([FromBody] BookingConfirmedClientEmailDto dto, CancellationToken ct)
     {
+        if (!ModelState.IsValid) return BadRequest(new { error = "Invalid email or parameters." });
+
         var subject = $"Booking confirmed — {dto.ServiceName} with {dto.PtName}";
         var when = $"{dto.StartsAtLocal:yyyy-MM-dd HH:mm} ({dto.Timezone})";
         var text =
@@ -386,7 +424,7 @@ Manage your booking:
             headers: FlowHeaders("booking-confirmed-client"),
             attachments: atts,
             tags: Tags(("flow", "booking-confirmed-client")),
-            fromOverride: _smtp.FromAddresses.Booking
+            fromOverride: SafeFrom(_smtp?.FromAddresses?.Booking)
         );
         return Ok(new { sent = true });
     }
@@ -397,6 +435,8 @@ Manage your booking:
     [HttpPost("booking/confirmed-pt")]
     public async Task<IActionResult> BookingConfirmedPt([FromBody] BookingConfirmedPtEmailDto dto, CancellationToken ct)
     {
+        if (!ModelState.IsValid) return BadRequest(new { error = "Invalid email or parameters." });
+
         var subject = $"You confirmed a booking — {dto.ServiceName} for {dto.ClientName}";
         var when = $"{dto.StartsAtLocal:yyyy-MM-dd HH:mm} ({dto.Timezone})";
         var text =
@@ -410,6 +450,7 @@ Duration: {dto.DurationMinutes} minutes
 Price: {dto.Price}
 
 {EmailText.Footer}";
+
         await _sender.SendAsync(
             to: dto.To,
             subject: subject,
@@ -418,7 +459,7 @@ Price: {dto.Price}
             ct: ct,
             headers: FlowHeaders("booking-confirmed-pt"),
             tags: Tags(("flow", "booking-confirmed-pt")),
-            fromOverride: _smtp.FromAddresses.Booking
+            fromOverride: SafeFrom(_smtp?.FromAddresses?.Booking)
         );
         return Ok(new { sent = true });
     }
@@ -429,6 +470,8 @@ Price: {dto.Price}
     [HttpPost("booking/cancelled-by-pt")]
     public async Task<IActionResult> BookingCancelledByPt([FromBody] BookingCancelledByPtEmailDto dto, CancellationToken ct)
     {
+        if (!ModelState.IsValid) return BadRequest(new { error = "Invalid email or parameters." });
+
         var subject = $"Booking cancelled by {dto.PtName} — {dto.ServiceName}";
         var when = $"{dto.StartsAtLocal:yyyy-MM-dd HH:mm} ({dto.Timezone})";
         var text =
@@ -443,6 +486,7 @@ Find another coach or reschedule:
 {dto.SearchUrl}
 
 {EmailText.Footer}";
+
         await _sender.SendAsync(
             to: dto.To,
             subject: subject,
@@ -451,7 +495,7 @@ Find another coach or reschedule:
             ct: ct,
             headers: FlowHeaders("booking-cancelled-by-pt"),
             tags: Tags(("flow", "booking-cancelled-by-pt")),
-            fromOverride: _smtp.FromAddresses.Booking
+            fromOverride: SafeFrom(_smtp?.FromAddresses?.Booking)
         );
         return Ok(new { sent = true });
     }
@@ -462,6 +506,8 @@ Find another coach or reschedule:
     [HttpPost("booking/declined-by-pt")]
     public async Task<IActionResult> BookingDeclinedByPt([FromBody] BookingCancelledByPtEmailDto dto, CancellationToken ct)
     {
+        if (!ModelState.IsValid) return BadRequest(new { error = "Invalid email or parameters." });
+
         var subject = $"{dto.PtName} declined your request — {dto.ServiceName}";
         var when = $"{dto.StartsAtLocal:yyyy-MM-dd HH:mm} ({dto.Timezone})";
         var text =
@@ -476,6 +522,7 @@ You can try a different time or search for another coach:
 {dto.SearchUrl}
 
 {EmailText.Footer}";
+
         await _sender.SendAsync(
             to: dto.To,
             subject: subject,
@@ -484,9 +531,8 @@ You can try a different time or search for another coach:
             ct: ct,
             headers: FlowHeaders("booking-declined-by-pt"),
             tags: Tags(("flow", "booking-declined-by-pt")),
-            fromOverride: _smtp.FromAddresses.Booking
+            fromOverride: SafeFrom(_smtp?.FromAddresses?.Booking)
         );
         return Ok(new { sent = true });
     }
 }
-

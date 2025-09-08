@@ -1,6 +1,7 @@
 ﻿using System.Security.Cryptography;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Net.Mail; // ✅ for MailAddress.TryCreate
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -73,9 +74,18 @@ public class AuthVerificationController : ControllerBase
     [HttpPost("request-verification")]
     public async Task<IActionResult> RequestVerification([FromBody] RequestVerificationDto dto, CancellationToken ct)
     {
+        // ✅ Guard because you suppressed automatic ModelState filter in Program.cs
+        if (!ModelState.IsValid)
+            return BadRequest(new { error = "Invalid email or parameters." });
+
         var email = NormalizeEmail(dto.Email);
+
         if (string.IsNullOrWhiteSpace(email))
             return BadRequest(new { error = "Email is required" });
+
+        // ✅ Extra format guard – prevents FormatException deeper in the stack
+        if (!MailAddress.TryCreate(email, out _))
+            return BadRequest(new { error = "The email is not in a valid format." });
 
         var minutes = dto.ExpiresMinutes <= 0 ? 30 : dto.ExpiresMinutes;
 
@@ -118,6 +128,12 @@ This link expires in {minutes} minutes. If you didn’t start signup, you can ig
 
 {EmailText.Footer}";
 
+        // ✅ Safe fromOverride resolution (handles null/empty config gracefully)
+        var fromVerification = _smtp?.FromAddresses?.Verification;
+        if (string.IsNullOrWhiteSpace(fromVerification))
+            fromVerification = _smtp?.FromAddresses?.Default;
+        var fromOverride = string.IsNullOrWhiteSpace(fromVerification) ? null : fromVerification;
+
         await _sender.SendAsync(
             to: email,
             subject: subject,
@@ -126,7 +142,7 @@ This link expires in {minutes} minutes. If you didn’t start signup, you can ig
             ct: ct,
             headers: FlowHeaders("verify-link"),
             tags: Tags(("flow", "verify-link")),
-            fromOverride: _smtp.FromAddresses.Verification
+            fromOverride: fromOverride
         );
 
         // Do NOT reveal whether the email exists as a coach — avoid account enumeration.
@@ -191,6 +207,12 @@ If you need help at any time, just reply to this email.
 
 {EmailText.Footer}";
 
+            // ✅ Safe fromOverride for welcome mails
+            var fromWelcome = _smtp?.FromAddresses?.Welcome;
+            if (string.IsNullOrWhiteSpace(fromWelcome))
+                fromWelcome = _smtp?.FromAddresses?.Default;
+            var fromOverride = string.IsNullOrWhiteSpace(fromWelcome) ? null : fromWelcome;
+
             await _sender.SendAsync(
                 to: email,
                 subject: subject,
@@ -199,7 +221,7 @@ If you need help at any time, just reply to this email.
                 ct: ct,
                 headers: FlowHeaders("email-verified-coach"),
                 tags: Tags(("flow", "email-verified-coach")),
-                fromOverride: _smtp.FromAddresses.Welcome
+                fromOverride: fromOverride
             );
         }
 
@@ -233,5 +255,4 @@ If you need help at any time, just reply to this email.
         return handler.WriteToken(token);
     }
 }
-
 
