@@ -8,6 +8,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 using PTfinder.API.DATA;
 using PTfinder.API.Services;
 using PTfinder.API.Settings;
@@ -53,7 +54,7 @@ builder.Services.AddDbContextPool<AppDbContext>(options =>
             maxRetryDelay: TimeSpan.FromSeconds(10),
             errorNumbersToAdd: new[] { 40613, 40197, 40501, 10928, 10929 } // common Azure SQL transient errors
         );
-        sql.CommandTimeout(30); // command timeout (seconds)
+        sql.CommandTimeout(30); // seconds
     })
 );
 
@@ -74,9 +75,39 @@ builder.Services.Configure<ApiBehaviorOptions>(o =>
     o.SuppressModelStateInvalidFilter = true;
 });
 
-// ------------ Swagger (enabled during bring-up; disable later if you want) ------------
+// ------------ Swagger (hardened) ------------
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "PTfinder API", Version = "v1" });
+
+    // Avoid type-name collisions across namespaces
+    c.CustomSchemaIds(t => t.FullName);
+
+    // If two actions resolve to the same route/verb, pick the first (prevents throw)
+    c.ResolveConflictingActions(apiDescriptions => apiDescriptions.First());
+
+    // Optional: JWT in Swagger
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "Enter: Bearer {your JWT}"
+    });
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
+            },
+            Array.Empty<string>()
+        }
+    });
+});
 
 // ------------ SMTP settings + email sender ------------
 builder.Services.Configure<SmtpSettings>(builder.Configuration.GetSection("Smtp"));
@@ -104,12 +135,12 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-// ------------ Health checks (framework-native) ------------
+// ------------ Health checks ------------
 builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 
-// ------------ Log DB target at startup (helps verify 'mycon') ------------
+// ------------ Log DB target at startup ------------
 try
 {
     var b = new SqlConnectionStringBuilder(cs);
@@ -121,27 +152,45 @@ catch (Exception ex)
     app.Logger.LogError(ex, "Could not parse connection string 'mycon'.");
 }
 
-// ------------ Global exception handler (echo CORS on errors) ------------
-app.UseExceptionHandler(errorApp =>
+// ------------ Error pages / handler by environment ------------
+if (app.Environment.IsDevelopment())
 {
-    errorApp.Run(async context =>
+    app.UseDeveloperExceptionPage();
+}
+else
+{
+    // Global exception handler (safe header writes)
+    app.UseExceptionHandler(errorApp =>
     {
-        context.Response.StatusCode = 500;
-        context.Response.ContentType = "application/json";
-
-        var origin = context.Request.Headers["Origin"].ToString();
-        if (!string.IsNullOrEmpty(origin) && allowedOrigins.Contains(origin))
+        errorApp.Run(async context =>
         {
-            context.Response.Headers["Access-Control-Allow-Origin"] = origin;
-            context.Response.Headers["Vary"] = "Origin";
-        }
+            var origin = context.Request.Headers["Origin"].ToString();
 
-        var err = context.Features.Get<IExceptionHandlerFeature>()?.Error?.Message ?? "Unhandled server error";
-        await context.Response.WriteAsync($"{{\"error\":\"{err}\"}}");
+            if (!context.Response.HasStarted)
+            {
+                context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+                context.Response.ContentType = "application/json";
+
+                if (!string.IsNullOrEmpty(origin) && allowedOrigins.Contains(origin))
+                {
+                    context.Response.Headers["Access-Control-Allow-Origin"] = origin;
+                    context.Response.Headers["Vary"] = "Origin";
+                }
+
+                var err = context.Features.Get<IExceptionHandlerFeature>()?.Error?.Message
+                          ?? "Unhandled server error";
+                await context.Response.WriteAsync($"{{\"error\":\"{err}\"}}");
+            }
+            else
+            {
+                var err = context.Features.Get<IExceptionHandlerFeature>()?.Error;
+                app.Logger.LogError(err, "Unhandled exception after response started.");
+            }
+        });
     });
-});
+}
 
-// ------------ Middleware order (keep this) ------------
+// ------------ Middleware order ------------
 app.UseHttpsRedirection();
 app.UseCors("AllowReactApp");
 app.UseAuthentication();
@@ -170,9 +219,12 @@ app.Use(async (ctx, next) =>
     await next();
 });
 
-// ------------ Per-request timing + correlation id (nice for logs) ------------
+// ------------ Per-request timing + correlation id (set BEFORE next) ------------
 app.Use(async (ctx, next) =>
 {
+    // set early so it's always present and safe
+    ctx.Response.Headers["x-correlation-id"] = ctx.TraceIdentifier;
+
     var sw = Stopwatch.StartNew();
     try { await next(); }
     finally
@@ -180,18 +232,27 @@ app.Use(async (ctx, next) =>
         sw.Stop();
         app.Logger.LogInformation("HTTP {Method} {Path} => {Status} in {Ms} ms (cid {Cid})",
             ctx.Request.Method, ctx.Request.Path, ctx.Response.StatusCode, sw.ElapsedMilliseconds, ctx.TraceIdentifier);
-        ctx.Response.Headers["x-correlation-id"] = ctx.TraceIdentifier;
+        // do not set headers here; response may have started
     }
 });
 
-// ------------ Swagger UI (enable during bring-up; gate later if desired) ------------
-app.UseSwagger();
-app.UseSwaggerUI(c =>
+// ------------ Swagger UI (gated) ------------
+if (app.Environment.IsDevelopment())
 {
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "PTfinder API v1");
-});
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "PTfinder API v1");
+    });
+}
+else
+{
+    // Keep JSON (useful for client integrations); UI optional
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
 
-// ------------ SAFE auto-migrate (won’t crash app if DB isn’t ready) ------------
+// ------------ SAFE auto-migrate ------------
 using (var scope = app.Services.CreateScope())
 {
     try
@@ -209,7 +270,6 @@ using (var scope = app.Services.CreateScope())
 
 // ------------ Liveness & diagnostics endpoints ------------
 app.MapGet("/health", () => Results.Ok(new { status = "ok", t = DateTime.UtcNow }));
-
 app.MapHealthChecks("/healthz");
 
 // Config peek (no secrets leaked)
@@ -298,4 +358,3 @@ app.Lifetime.ApplicationStarted.Register(() =>
 });
 
 app.Run();
-
