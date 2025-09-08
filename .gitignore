@@ -1,13 +1,8 @@
-# Ignore Visual Studio files
-.vs/
-.vscode/
-.env
+
+# Build artifacts
+/bin/
+/obj/
 *.user
 *.suo
-*.userosscache
-*.sln.docstates
+*.log
 
-
-# Ignore build directories
-bin/
-obj/
