@@ -269,6 +269,7 @@ using (var scope = app.Services.CreateScope())
 }
 
 // ------------ Liveness & diagnostics endpoints ------------
+// Keep only endpoints that DO NOT collide with DebugController.
 app.MapGet("/health", () => Results.Ok(new { status = "ok", t = DateTime.UtcNow }));
 app.MapHealthChecks("/healthz");
 
@@ -281,59 +282,7 @@ app.MapGet("/debug/config", (IConfiguration cfg) =>
     return Results.Ok(new { hasMycon = mycon != "(null)", connectionStringMasked = masked, environment = env });
 });
 
-// DB ping (from inside the running app)
-app.MapGet("/debug/dbping", async (IServiceProvider sp) =>
-{
-    try
-    {
-        var cfg = sp.GetRequiredService<IConfiguration>();
-        var csLocal = cfg.GetConnectionString("mycon") ?? "(null)";
-        using var conn = new Microsoft.Data.SqlClient.SqlConnection(csLocal);
-        await conn.OpenAsync();
-
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT DB_NAME() AS DbName, SUSER_SNAME() AS LoginName;";
-        using var r = await cmd.ExecuteReaderAsync();
-        string dbName = "", login = "";
-        if (await r.ReadAsync()) { dbName = r.GetString(0); login = r.GetString(1); }
-
-        return Results.Ok(new
-        {
-            canConnect = true,
-            dataSource = conn.DataSource,
-            database = conn.Database,
-            login,
-            reportedDb = dbName
-        });
-    }
-    catch (Exception ex)
-    {
-        return Results.Problem(ex.Message);
-    }
-});
-
-// Migrations applied?
-app.MapGet("/debug/migrations", async (AppDbContext db) =>
-{
-    try
-    {
-        var applied = new List<object>();
-        await db.Database.OpenConnectionAsync();
-        using var cmd = db.Database.GetDbConnection().CreateCommand();
-        cmd.CommandText = "IF OBJECT_ID('__EFMigrationsHistory') IS NOT NULL SELECT [MigrationId] FROM __EFMigrationsHistory ORDER BY [MigrationId];";
-        using var rd = await cmd.ExecuteReaderAsync();
-        while (await rd.ReadAsync()) applied.Add(new { MigrationId = rd.GetString(0) });
-        return Results.Ok(new { migrationsApplied = applied });
-    }
-    catch (Exception ex)
-    {
-        return Results.Problem(ex.Message);
-    }
-    finally
-    {
-        await db.Database.CloseConnectionAsync();
-    }
-});
+// NOTE: Do NOT map /debug/dbping or /debug/migrations here; they are owned by DebugController.
 
 // ------------ Map controllers ------------
 app.MapControllers();
