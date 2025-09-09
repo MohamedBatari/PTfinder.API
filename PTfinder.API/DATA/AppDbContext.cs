@@ -18,7 +18,7 @@ namespace PTfinder.API.DATA
         public DbSet<City> Cities { get; set; } = null!;
         public DbSet<Area> Areas { get; set; } = null!;
         public DbSet<GalleryMedia> GalleryMedia { get; set; } = null!;
-        public DbSet<EmailVerification> EmailVerifications { get; set; } = null!;
+        public DbSet<EmailOtp> EmailOtps { get; set; } = default!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -78,15 +78,7 @@ namespace PTfinder.API.DATA
                 .Property(c => c.Price)
                 .HasPrecision(10, 2);
 
-            // EmailVerification indexes
-            modelBuilder.Entity<EmailVerification>(b =>
-            {
-                b.Property(x => x.Email).IsRequired().HasMaxLength(320);
-                b.Property(x => x.Token).IsRequired().HasMaxLength(200);
-                b.HasIndex(x => x.Email);
-                b.HasIndex(x => x.Token).IsUnique();
-            });
-
+           
             base.OnModelCreating(modelBuilder);
 
             // DO NOT add any global override loop here that changes all DeleteBehavior.
