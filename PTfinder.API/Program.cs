@@ -1,6 +1,4 @@
-﻿using System.Diagnostics;
-using System.Text;
-using DotNetEnv;
+﻿using DotNetEnv;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
@@ -10,13 +8,18 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using PTfinder.API.DATA;
+using PTfinder.API.Hubs;
 using PTfinder.API.Services;
 using PTfinder.API.Settings;
+using System.Diagnostics;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // ------------ Load .env (optional for local) ------------
 Env.Load();
+builder.Services.AddSignalR();
+builder.Services.AddScoped<INotificationService, NotificationService>();
 
 // ------------ Allowed Origins ------------
 var allowedOrigins = new[]
@@ -25,6 +28,16 @@ var allowedOrigins = new[]
     "https://www.ptfindernow.com",
     "http://localhost:3000",
 };
+
+
+// CORS must allow WebSockets + credentials from your web origins
+builder.Services.AddCors(o => o.AddPolicy("web",
+    p => p
+        .WithOrigins("http://localhost:3000", "https://ptfindernow.com")
+        .AllowAnyHeader()
+        .AllowAnyMethod()
+        .AllowCredentials()
+));
 
 // ------------ CORS policy ------------
 builder.Services.AddCors(options =>
@@ -283,6 +296,7 @@ app.MapGet("/debug/config", (IConfiguration cfg) =>
 });
 
 // NOTE: Do NOT map /debug/dbping or /debug/migrations here; they are owned by DebugController.
+app.MapHub<NotifyHub>("/hubs/notify");
 
 // ------------ Map controllers ------------
 app.MapControllers();

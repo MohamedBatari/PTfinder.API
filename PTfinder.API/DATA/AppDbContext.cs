@@ -19,9 +19,18 @@ namespace PTfinder.API.DATA
         public DbSet<Area> Areas { get; set; } = null!;
         public DbSet<GalleryMedia> GalleryMedia { get; set; } = null!;
         public DbSet<EmailOtp> EmailOtps { get; set; } = default!;
+        public DbSet<Notification> Notifications { get; set; } = null!;
+
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+
+            modelBuilder.Entity<Availability>(b =>
+            {
+                b.HasIndex(a => new { a.CoachId, a.AvailableDate, a.TimeSlot })
+                 .IsUnique();
+            });
+
             // Safe cascades for the location hierarchy
             modelBuilder.Entity<Country>()
                 .HasMany(c => c.Cities)
@@ -77,6 +86,31 @@ namespace PTfinder.API.DATA
             modelBuilder.Entity<Coach>()
                 .Property(c => c.Price)
                 .HasPrecision(10, 2);
+
+            modelBuilder.Entity<EmailOtp>(b =>
+            {
+                b.HasKey(x => x.Id);
+                b.Property(x => x.Email).IsRequired().HasMaxLength(320);
+                b.Property(x => x.CodeHash).IsRequired().HasMaxLength(64); // SHA256 hex
+                b.Property(x => x.Attempts).HasDefaultValue(0);
+
+                b.HasIndex(x => x.Email);
+                b.HasIndex(x => new { x.Email, x.CodeHash });
+                b.HasIndex(x => x.ExpiresUtc);
+            });
+
+
+            // DATA/AppDbContext.cs  inside OnModelCreating
+            modelBuilder.Entity<Notification>(e =>
+            {
+                e.Property(x => x.Title).HasMaxLength(200).IsRequired();
+                e.Property(x => x.Body).HasMaxLength(2000).IsRequired();
+                e.Property(x => x.Link).HasMaxLength(512);
+                e.Property(x => x.CreatedAtUtc).HasDefaultValueSql("GETUTCDATE()");
+            });
+
+
+
 
 
             base.OnModelCreating(modelBuilder);
