@@ -78,7 +78,7 @@ namespace PTfinder.API.DATA
                 .Property(c => c.Price)
                 .HasPrecision(10, 2);
 
-           
+
             base.OnModelCreating(modelBuilder);
 
             // DO NOT add any global override loop here that changes all DeleteBehavior.
