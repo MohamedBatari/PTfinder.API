@@ -21,7 +21,11 @@ namespace PTfinder.API.Controllers
         private readonly IEmailSender _sender;
         private readonly SmtpSettings _smtp;
 
-        public CoachesController(AppDbContext context, BlobStorageService blobs, IEmailSender sender, IOptions<SmtpSettings> smtp)
+        public CoachesController(
+            AppDbContext context,
+            BlobStorageService blobs,
+            IEmailSender sender,
+            IOptions<SmtpSettings> smtp)
         {
             _context = context;
             _blobs = blobs;
@@ -37,13 +41,16 @@ namespace PTfinder.API.Controllers
             { "X-Auto-Response-Suppress", "All" },
             { "Feedback-ID", $"ptn-tx:{flow}:ptfindernow" }
         };
+
         private string? SafeFrom(string? preferredFrom)
         {
             var chosen = string.IsNullOrWhiteSpace(preferredFrom) ? _smtp?.FromAddresses?.Default : preferredFrom;
             return string.IsNullOrWhiteSpace(chosen) ? null : chosen;
         }
 
+        // ─────────────────────────────────────────────────────────────────────────
         // GET: api/coaches
+        // ─────────────────────────────────────────────────────────────────────────
         [HttpGet]
         public async Task<ActionResult<IEnumerable<object>>> GetCoaches()
         {
@@ -86,7 +93,9 @@ namespace PTfinder.API.Controllers
             return Ok(response);
         }
 
+        // ─────────────────────────────────────────────────────────────────────────
         // GET: api/coaches/{id}
+        // ─────────────────────────────────────────────────────────────────────────
         [HttpGet("{id}")]
         public async Task<IActionResult> GetCoach(int id)
         {
@@ -131,7 +140,9 @@ namespace PTfinder.API.Controllers
             return Ok(response);
         }
 
+        // ─────────────────────────────────────────────────────────────────────────
         // GET: api/coaches/check-email?email=...
+        // ─────────────────────────────────────────────────────────────────────────
         [HttpGet("check-email")]
         public async Task<IActionResult> CheckEmailExists(string email)
         {
@@ -139,7 +150,94 @@ namespace PTfinder.API.Controllers
             return Ok(new { exists = coachExists });
         }
 
+        // ─────────────────────────────────────────────────────────────────────────
+        // GET: api/coaches/Search
+        // Accepts: Specialty / Speciality, Country, City, Area, Gender
+        // Optional: CategoryId, SpecialityId
+        // Example:
+        // /api/coaches/Search?Specialty=Personal+Training&Country=United+Arab+Emirates&City=Dubai&Area=Dubai+Marina&Gender=Male
+        // ─────────────────────────────────────────────────────────────────────────
+        [HttpGet("Search")]
+        public async Task<IActionResult> Search(
+            [FromQuery] string? Specialty,
+            [FromQuery] string? Speciality,
+            [FromQuery] string? Country,
+            [FromQuery] string? City,
+            [FromQuery] string? Area,
+            [FromQuery] string? Gender,
+            [FromQuery] int? CategoryId,
+            [FromQuery] int? SpecialityId)
+        {
+            var query = _context.Coaches
+                .Include(c => c.Category)
+                .Include(c => c.Speciality)
+                .Include(c => c.Country)
+                .Include(c => c.City)
+                .Include(c => c.Area)
+                .AsQueryable();
+
+            // Handle both "Specialty" and "Speciality" (American/British)
+            var specialtyTerm = (Specialty ?? Speciality)?.Trim();
+            if (!string.IsNullOrWhiteSpace(specialtyTerm))
+            {
+                var t = specialtyTerm.ToLower();
+                query = query.Where(c => c.Speciality != null && c.Speciality.Name.ToLower().Contains(t));
+            }
+
+            if (CategoryId.HasValue)
+                query = query.Where(c => c.CategoryId == CategoryId.Value);
+
+            if (SpecialityId.HasValue)
+                query = query.Where(c => c.SpecialityId == SpecialityId.Value);
+
+            if (!string.IsNullOrWhiteSpace(Country))
+            {
+                var t = Country.Trim().ToLower();
+                query = query.Where(c => c.Country != null && c.Country.Name.ToLower().Contains(t));
+            }
+
+            if (!string.IsNullOrWhiteSpace(City))
+            {
+                var t = City.Trim().ToLower();
+                query = query.Where(c => c.City != null && c.City.Name.ToLower().Contains(t));
+            }
+
+            if (!string.IsNullOrWhiteSpace(Area))
+            {
+                var t = Area.Trim().ToLower();
+                query = query.Where(c => c.Area != null && c.Area.Name.ToLower().Contains(t));
+            }
+
+            if (!string.IsNullOrWhiteSpace(Gender))
+            {
+                var t = Gender.Trim().ToLower();
+                query = query.Where(c => !string.IsNullOrEmpty(c.Gender) && c.Gender.ToLower().Contains(t));
+            }
+
+            var result = await query
+                .Select(c => new
+                {
+                    c.Id,
+                    c.FullName,
+                    ProfileImage = string.IsNullOrWhiteSpace(c.ProfileImage)
+                        ? null
+                        : _blobs.GetReadUrl(c.ProfileImage, TimeSpan.FromMinutes(60)),
+                    c.Price,
+                    c.Description,
+                    CategoryName = c.Category != null ? c.Category.Name : null,
+                    SpecialtyName = c.Speciality != null ? c.Speciality.Name : null,
+                    CountryName = c.Country != null ? c.Country.Name : null,
+                    CityName = c.City != null ? c.City.Name : null,
+                    AreaName = c.Area != null ? c.Area.Name : null
+                })
+                .ToListAsync();
+
+            return Ok(result);
+        }
+
+        // ─────────────────────────────────────────────────────────────────────────
         // POST: api/coaches (multipart/form-data)
+        // ─────────────────────────────────────────────────────────────────────────
         [HttpPost]
         public async Task<ActionResult<Coach>> PostCoach([FromForm] CoachCreateDto dto)
         {
@@ -168,7 +266,7 @@ namespace PTfinder.API.Controllers
                 CityId = dto.CityId,
                 AreaId = dto.AreaId,
                 ProfileImage = blobName,
-                EmailVerified = true // by now we have emailProof; keep true for convenience
+                EmailVerified = true // email has been verified via OTP at signup
             };
 
             _context.Coaches.Add(coach);
@@ -205,9 +303,72 @@ We’re here to help — reply to this email if you need assistance.
                 fromOverride: SafeFrom(_smtp?.FromAddresses?.Welcome)
             );
 
-            return CreatedAtAction("GetCoach", new { id = coach.Id }, coach);
+            return CreatedAtAction(nameof(GetCoach), new { id = coach.Id }, coach);
         }
 
-        // PUT & DELETE unchanged…
+        // ─────────────────────────────────────────────────────────────────────────
+        // PUT: api/coaches/{id}  (multipart/form-data)
+        // ─────────────────────────────────────────────────────────────────────────
+        [HttpPut("{id}")]
+        public async Task<IActionResult> UpdateCoach(int id, [FromForm] CoachUpdateDto dto)
+        {
+            var coach = await _context.Coaches.FindAsync(id);
+            if (coach == null)
+                return NotFound();
+
+            coach.FullName = dto.FullName;
+            coach.Email = dto.Email;
+            coach.PhoneNumber = dto.PhoneNumber;
+            coach.Password = dto.Password;
+            coach.Gender = dto.Gender;
+            coach.Price = dto.Price;
+            coach.Description = dto.Description;
+            coach.CategoryId = dto.CategoryId;
+            coach.SpecialityId = dto.SpecialityId;
+            coach.CountryId = dto.CountryId;
+            coach.CityId = dto.CityId;
+            coach.AreaId = dto.AreaId;
+
+            if (dto.ProfileImage != null && dto.ProfileImage.Length > 0)
+            {
+                var newName = Guid.NewGuid() + Path.GetExtension(dto.ProfileImage.FileName);
+
+                await using var stream = dto.ProfileImage.OpenReadStream();
+                await _blobs.UploadAsync(newName, stream, dto.ProfileImage.ContentType);
+
+                // delete old blob if any
+                if (!string.IsNullOrWhiteSpace(coach.ProfileImage))
+                    await _blobs.DeleteAsync(coach.ProfileImage);
+
+                coach.ProfileImage = newName; // store new blob name
+            }
+
+            await _context.SaveChangesAsync();
+
+            return NoContent();
+        }
+
+        // ─────────────────────────────────────────────────────────────────────────
+        // DELETE: api/coaches/{id}
+        // ─────────────────────────────────────────────────────────────────────────
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeleteCoach(int id)
+        {
+            var coach = await _context.Coaches.FindAsync(id);
+            if (coach == null)
+                return NotFound();
+
+            // delete avatar blob if any
+            if (!string.IsNullOrWhiteSpace(coach.ProfileImage))
+            {
+                await _blobs.DeleteAsync(coach.ProfileImage);
+            }
+
+            _context.Coaches.Remove(coach);
+            await _context.SaveChangesAsync();
+
+            return NoContent();
+        }
     }
 }
+
