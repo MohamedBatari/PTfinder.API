@@ -60,7 +60,7 @@ namespace PTfinder.API.Controllers
             // Real-time notification → Coach
             // ─────────────────────────────────────────────────────
             // serviceName/timezone: customize as you like or extend DTO
-            var serviceName = "Personal training session";
+            var serviceName = "session";
             var timezone = "Asia/Dubai";
             await _notifications.NotifyCoachBookingRequest(
                 coachId: booking.CoachId,
@@ -89,7 +89,6 @@ $@"You have a new booking request.
 Client: {booking.StudentName}
 Email: {booking.StudentEmail}
 Phone: {booking.StudentPhone}
-Service: {serviceName}
 Date/Time: {when} (local)
 Time Slot: {booking.TimeSlot}
 
@@ -102,19 +101,16 @@ Manage this request:
             // Email → Student (receipt)
             await _sender.SendAsync(
                 to: booking.StudentEmail,
-                subject: $"We sent your request to {coach.FullName} — {serviceName}",
+                subject: $"We sent your request to {coach.FullName} — ",
                 htmlBody: null,
                 textBody:
 $@"Your booking request was sent to {coach.FullName}.
 
-Service: {serviceName}
 Requested time: {when}
 Time Slot: {booking.TimeSlot}
 
 We'll email you when the coach confirms or proposes a new time.
 
-You can manage your request here:
-{manageUrl}
 
 — PTfinderNow"
             , ct: ct);
@@ -187,18 +183,16 @@ You can manage your request here:
                 // email student
                 await _sender.SendAsync(
                     to: booking.StudentEmail,
-                    subject: $"Booking confirmed — {serviceName} with {coach.FullName}",
+                    subject: $"Booking confirmed — with {coach.FullName}",
                     htmlBody: null,
                     textBody:
         $@"Your booking is confirmed.
 
 Coach: {coach.FullName}
-Service: {serviceName}
 Date/Time: {when}
 Time Slot: {booking.TimeSlot}
 
 Manage your booking:
-{manageUrl}
 
 — PTfinderNow",
                     ct: ct);
@@ -218,12 +212,11 @@ Manage your booking:
                 // email student
                 await _sender.SendAsync(
                     to: booking.StudentEmail,
-                    subject: $"{coach.FullName} declined your request — {serviceName}",
+                    subject: $"{coach.FullName} declined your request — ",
                     htmlBody: null,
                     textBody:
         $@"Your booking request was declined by {coach.FullName}.
 
-Service: {serviceName}
 Requested time: {when}
 Time Slot: {booking.TimeSlot}
 
