@@ -373,35 +373,6 @@ namespace PTfinder.API.Migrations
                     b.ToTable("Notifications");
                 });
 
-            modelBuilder.Entity("PTfinder.API.DATA.Modules.Review", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("CoachId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Comment")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("Rating")
-                        .HasColumnType("int");
-
-                    b.Property<string>("StudentName")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CoachId");
-
-                    b.ToTable("Reviews");
-                });
-
             modelBuilder.Entity("PTfinder.API.DATA.Modules.Speciality", b =>
                 {
                     b.Property<int>("Id")
@@ -449,6 +420,50 @@ namespace PTfinder.API.Migrations
                     b.HasIndex("CoachId");
 
                     b.ToTable("Subscriptions");
+                });
+
+            modelBuilder.Entity("Review", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AvatarUrl")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("CoachId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Comment")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("GoogleSub")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("GoogleVerified")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("Rating")
+                        .HasColumnType("int");
+
+                    b.Property<string>("StudentEmail")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("StudentName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CoachId");
+
+                    b.ToTable("Reviews");
                 });
 
             modelBuilder.Entity("PTfinder.API.DATA.Modules.Area", b =>
@@ -558,17 +573,6 @@ namespace PTfinder.API.Migrations
                     b.Navigation("Coach");
                 });
 
-            modelBuilder.Entity("PTfinder.API.DATA.Modules.Review", b =>
-                {
-                    b.HasOne("PTfinder.API.DATA.Modules.Coach", "Coach")
-                        .WithMany("Reviews")
-                        .HasForeignKey("CoachId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Coach");
-                });
-
             modelBuilder.Entity("PTfinder.API.DATA.Modules.Speciality", b =>
                 {
                     b.HasOne("PTfinder.API.DATA.Modules.Category", "Category")
@@ -589,6 +593,15 @@ namespace PTfinder.API.Migrations
                         .IsRequired();
 
                     b.Navigation("Coach");
+                });
+
+            modelBuilder.Entity("Review", b =>
+                {
+                    b.HasOne("PTfinder.API.DATA.Modules.Coach", null)
+                        .WithMany("Reviews")
+                        .HasForeignKey("CoachId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("PTfinder.API.DATA.Modules.Category", b =>
