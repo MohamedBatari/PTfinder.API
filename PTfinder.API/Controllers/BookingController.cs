@@ -4,7 +4,7 @@ using PTfinder.API.DATA;
 using PTfinder.API.DATA.Modules;
 using PTfinder.API.DATA.DTO;
 using PTfinder.API.Enums;
-using PTfinder.API.Services; // ⬅️ for INotificationService, IEmailSender
+using PTfinder.API.Services; 
 
 namespace PTfinder.API.Controllers
 {
@@ -76,7 +76,7 @@ namespace PTfinder.API.Controllers
             // Transactional emails (simple text)
             // ─────────────────────────────────────────────────────
             var when = $"{booking.BookingDate:yyyy-MM-dd HH:mm}";
-            var manageUrl = $"{WebBaseUrl}/dashboard/bookings/{booking.Id}";
+            var manageUrl = $"{WebBaseUrl}/dashboard/bookings/bookings/{booking.Id}";
 
             // Email → Coach
             await _sender.SendAsync(
