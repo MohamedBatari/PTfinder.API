@@ -165,7 +165,7 @@ We'll email you when the coach confirms or proposes a new time.
             var serviceName = "Personal training session";     // tweak if you store service name
             var timezone = "Asia/Dubai";                       // tweak if you store user tz
             var when = $"{booking.BookingDate:yyyy-MM-dd HH:mm}";
-            var manageUrl = $"{WebBaseUrl}/dashboard/bookings/{booking.Id}";
+            var manageUrl = $"{WebBaseUrl}/dashboard/bookings/bookings/{booking.Id}";
 
             // Email → Student; Notification → Coach
             if (statusDto.Status == BookingStatus.Accepted)
@@ -221,7 +221,7 @@ Requested time: {when}
 Time Slot: {booking.TimeSlot}
 
 You can try a different time or search for another coach:
-{WebBaseUrl}/search
+{WebBaseUrl}/Coaches/search
 
 — PTfinderNow",
                     ct: ct);
