@@ -6,6 +6,7 @@ namespace PTfinder.API.DATA
     public class AppDbContext : DbContext
     {
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
+        public DbSet<Partner> Partners { get; set; }
 
         public DbSet<Category> Categories { get; set; } = null!;
         public DbSet<Speciality> Specialities { get; set; } = null!;
@@ -108,6 +109,16 @@ namespace PTfinder.API.DATA
                 e.Property(x => x.Link).HasMaxLength(512);
                 e.Property(x => x.CreatedAtUtc).HasDefaultValueSql("GETUTCDATE()");
             });
+
+            modelBuilder.Entity<Coach>()
+    .HasOne(c => c.Partner)
+    .WithMany(p => p.Coaches)
+    .HasForeignKey(c => c.PartnerId)
+    .OnDelete(DeleteBehavior.SetNull); // if partner deleted, keep coach as freelancer
+
+            // Useful indexes
+            modelBuilder.Entity<Coach>().HasIndex(c => c.PartnerId);
+            modelBuilder.Entity<Coach>().HasIndex(c => c.Email);
 
 
 

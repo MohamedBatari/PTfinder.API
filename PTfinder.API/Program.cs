@@ -11,6 +11,8 @@ using PTfinder.API.DATA;
 using PTfinder.API.Hubs;
 using PTfinder.API.Services;
 using PTfinder.API.Settings;
+using AppBillingService = PTfinder.API.Services.BillingService; // alias to avoid Stripe.BillingService collision
+using Stripe;
 using System.Diagnostics;
 using System.Text;
 
@@ -18,6 +20,8 @@ var builder = WebApplication.CreateBuilder(args);
 
 // ------------ Load .env (optional for local) ------------
 Env.Load();
+
+// ------------ SignalR & notifications ------------
 builder.Services.AddSignalR();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 
@@ -29,7 +33,6 @@ var allowedOrigins = new[]
     "http://localhost:3000",
 };
 
-
 // CORS must allow WebSockets + credentials from your web origins
 builder.Services.AddCors(o => o.AddPolicy("web",
     p => p
@@ -39,7 +42,14 @@ builder.Services.AddCors(o => o.AddPolicy("web",
         .AllowCredentials()
 ));
 
-// ------------ CORS policy ------------
+// ------------ Stripe settings & config ------------
+builder.Services.Configure<StripeSettings>(builder.Configuration.GetSection("Stripe"));
+StripeConfiguration.ApiKey = builder.Configuration["Stripe:SecretKey"];
+
+// Register your BillingService using the alias (prevents ambiguity with Stripe.BillingService)
+builder.Services.AddScoped<AppBillingService>();
+
+// ------------ CORS policy (for general API calls) ------------
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReactApp", policy =>
@@ -81,6 +91,7 @@ builder.Services.AddControllers()
 
 // ------------ Other app services ------------
 builder.Services.AddSingleton<BlobStorageService>();
+builder.Services.AddScoped<PartnerService>(); // Partner seat enforcement & coach linking
 
 // ------------ API behavior tweaks ------------
 builder.Services.Configure<ApiBehaviorOptions>(o =>
@@ -205,7 +216,7 @@ else
 
 // ------------ Middleware order ------------
 app.UseHttpsRedirection();
-app.UseCors("AllowReactApp");
+app.UseCors("AllowReactApp"); // primary CORS for API requests
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseStaticFiles();
@@ -249,20 +260,15 @@ app.Use(async (ctx, next) =>
     }
 });
 
-// ------------ Swagger UI (gated) ------------
+// ------------ Swagger UI ------------
+app.UseSwagger();
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "PTfinder API v1");
-    });
+    app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "PTfinder API v1"));
 }
 else
 {
-    // Keep JSON (useful for client integrations); UI optional
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwaggerUI(); // keep UI in prod if you want; can lock behind auth/gateway
 }
 
 // ------------ SAFE auto-migrate ------------
@@ -282,7 +288,6 @@ using (var scope = app.Services.CreateScope())
 }
 
 // ------------ Liveness & diagnostics endpoints ------------
-// Keep only endpoints that DO NOT collide with DebugController.
 app.MapGet("/health", () => Results.Ok(new { status = "ok", t = DateTime.UtcNow }));
 app.MapHealthChecks("/healthz");
 
@@ -295,7 +300,7 @@ app.MapGet("/debug/config", (IConfiguration cfg) =>
     return Results.Ok(new { hasMycon = mycon != "(null)", connectionStringMasked = masked, environment = env });
 });
 
-// NOTE: Do NOT map /debug/dbping or /debug/migrations here; they are owned by DebugController.
+// Hubs
 app.MapHub<NotifyHub>("/hubs/notify");
 
 // ------------ Map controllers ------------
