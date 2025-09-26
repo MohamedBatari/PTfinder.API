@@ -227,6 +227,28 @@ namespace PTfinder.API.Controllers
 
             return Ok(result);
         }
+        // GET /api/Coaches/Names?q=mo   -> suggestions that start with "mo"
+        // If q is missing/empty, returns all coach names (you may cap the count if large)
+        [HttpGet("Names")]
+        public async Task<IActionResult> Names([FromQuery] string? q, [FromQuery] int take = 1000)
+        {
+            var query = _context.Coaches.AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(q))
+            {
+                var t = q.Trim().ToLower();
+                query = query.Where(c => c.FullName.ToLower().StartsWith(t));
+            }
+
+            // Order for stable UX
+            var result = await query
+                .OrderBy(c => c.FullName)
+                .Select(c => new { c.Id, c.FullName })
+                .Take(take)
+                .ToListAsync();
+
+            return Ok(result);
+        }
 
 
         // ─────────────────────────────────────────────────────────────────────────
