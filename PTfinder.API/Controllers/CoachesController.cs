@@ -159,14 +159,13 @@ namespace PTfinder.API.Controllers
         // ─────────────────────────────────────────────────────────────────────────
         [HttpGet("Search")]
         public async Task<IActionResult> Search(
-            [FromQuery] string? Specialty,
-            [FromQuery] string? Speciality,
-            [FromQuery] string? Country,
-            [FromQuery] string? City,
-            [FromQuery] string? Area,
-            [FromQuery] string? Gender,
-            [FromQuery] int? CategoryId,
-            [FromQuery] int? SpecialityId)
+     [FromQuery] int? CategoryId,
+     [FromQuery] int? SpecialityId,
+     [FromQuery] int? CountryId,
+     [FromQuery] int? CityId,
+     [FromQuery] int? AreaId,
+     [FromQuery] string? Gender,
+     [FromQuery] string? FullName)
         {
             var query = _context.Coaches
                 .Include(c => c.Category)
@@ -176,42 +175,31 @@ namespace PTfinder.API.Controllers
                 .Include(c => c.Area)
                 .AsQueryable();
 
-            // Handle both "Specialty" and "Speciality" (American/British)
-            var specialtyTerm = (Specialty ?? Speciality)?.Trim();
-            if (!string.IsNullOrWhiteSpace(specialtyTerm))
-            {
-                var t = specialtyTerm.ToLower();
-                query = query.Where(c => c.Speciality != null && c.Speciality.Name.ToLower().Contains(t));
-            }
-
             if (CategoryId.HasValue)
                 query = query.Where(c => c.CategoryId == CategoryId.Value);
 
             if (SpecialityId.HasValue)
                 query = query.Where(c => c.SpecialityId == SpecialityId.Value);
 
-            if (!string.IsNullOrWhiteSpace(Country))
-            {
-                var t = Country.Trim().ToLower();
-                query = query.Where(c => c.Country != null && c.Country.Name.ToLower().Contains(t));
-            }
+            if (CountryId.HasValue)
+                query = query.Where(c => c.CountryId == CountryId.Value);
 
-            if (!string.IsNullOrWhiteSpace(City))
-            {
-                var t = City.Trim().ToLower();
-                query = query.Where(c => c.City != null && c.City.Name.ToLower().Contains(t));
-            }
+            if (CityId.HasValue)
+                query = query.Where(c => c.CityId == CityId.Value);
 
-            if (!string.IsNullOrWhiteSpace(Area))
-            {
-                var t = Area.Trim().ToLower();
-                query = query.Where(c => c.Area != null && c.Area.Name.ToLower().Contains(t));
-            }
+            if (AreaId.HasValue)
+                query = query.Where(c => c.AreaId == AreaId.Value);
 
             if (!string.IsNullOrWhiteSpace(Gender))
             {
-                var t = Gender.Trim().ToLower();
-                query = query.Where(c => !string.IsNullOrEmpty(c.Gender) && c.Gender.ToLower().Contains(t));
+                var g = Gender.Trim().ToLower();
+                query = query.Where(c => !string.IsNullOrEmpty(c.Gender) && c.Gender.ToLower() == g);
+            }
+
+            if (!string.IsNullOrWhiteSpace(FullName))
+            {
+                var f = FullName.Trim().ToLower();
+                query = query.Where(c => c.FullName.ToLower().Contains(f));
             }
 
             var result = await query
@@ -224,6 +212,11 @@ namespace PTfinder.API.Controllers
                         : _blobs.GetReadUrl(c.ProfileImage, TimeSpan.FromMinutes(60)),
                     c.Price,
                     c.Description,
+                    CategoryId = c.CategoryId,
+                    SpecialityId = c.SpecialityId,
+                    CountryId = c.CountryId,
+                    CityId = c.CityId,
+                    AreaId = c.AreaId,
                     CategoryName = c.Category != null ? c.Category.Name : null,
                     SpecialtyName = c.Speciality != null ? c.Speciality.Name : null,
                     CountryName = c.Country != null ? c.Country.Name : null,
@@ -234,6 +227,7 @@ namespace PTfinder.API.Controllers
 
             return Ok(result);
         }
+
 
         // ─────────────────────────────────────────────────────────────────────────
         // POST: api/coaches (multipart/form-data)
