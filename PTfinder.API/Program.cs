@@ -25,6 +25,17 @@ Env.Load();
 builder.Services.AddSignalR();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 
+
+var stripeSecret =
+    builder.Configuration["Stripe:SecretKey"];
+if (string.IsNullOrWhiteSpace(stripeSecret))
+{
+    throw new InvalidOperationException(
+        "Stripe secret key is not configured. Set 'Stripe:SecretKey' ."
+    );
+}
+
+StripeConfiguration.ApiKey = stripeSecret;
 // ------------ Allowed Origins ------------
 var allowedOrigins = new[]
 {

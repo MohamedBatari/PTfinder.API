@@ -1,62 +1,76 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
-using PTfinder.API.DATA;
-using PTfinder.API.Services;
-using PTfinder.API.Settings;
+using PTfinder.API.DATA.Modules;
+using Stripe.Checkout;
+using PTfinder.API.DATA.Modules;
 
+namespace PTfinder.API.Controllers;
 
-namespace PTfinder.API.Controllers
+[ApiController]
+[Route("api/[controller]")]
+public class BillingController : ControllerBase
 {
-    [ApiController]
-    [Route("api/[controller]")]
-    public class BillingController : ControllerBase
+    [HttpPost("gift/checkout")]
+    public async Task<ActionResult<GiftCheckoutResponse>> CreateGiftCheckout([FromBody] GiftCheckoutRequest req)
     {
-        private readonly BillingService _billing;
-        private readonly AppDbContext _db;
-        private readonly StripeSettings _cfg;
+        if (req == null)
+            return BadRequest(new GiftCheckoutResponse { Message = "Invalid request." });
 
-        public BillingController(BillingService billing, AppDbContext db, IOptions<StripeSettings> cfg)
-        {
-            _billing = billing; _db = db; _cfg = cfg.Value;
-        }
+        if (req.Amount < 5)
+            return BadRequest(new GiftCheckoutResponse { Message = "Minimum amount is AED 5." });
 
-        // FREELANCER checkout
-        // POST /api/billing/freelancer/checkout?coachId=123&tier=premium&interval=month
-        [HttpPost("freelancer/checkout")]
-        public async Task<IActionResult> FreelancerCheckout([FromQuery] int coachId, [FromQuery] string tier = "premium", [FromQuery] string interval = "month")
-        {
-            var url = await _billing.CreateFreelancerCheckoutAsync(coachId, tier, interval);
-            return Ok(new { url });
-        }
+        var safeNote = (req.Note ?? string.Empty);
+        if (safeNote.Length > 120) safeNote = safeNote[..120];
 
-        // PARTNER checkout
-        // POST /api/billing/partner/checkout?partnerId=10&plan=medium&interval=month
-        [HttpPost("partner/checkout")]
-        public async Task<IActionResult> PartnerCheckout([FromQuery] int partnerId, [FromQuery] string plan = "small", [FromQuery] string interval = "month")
-        {
-            var url = await _billing.CreatePartnerCheckoutAsync(partnerId, plan, interval);
-            return Ok(new { url });
-        }
+        // Fallback Success/Cancel URL if not provided by client
+        var origin = $"{Request.Scheme}://{Request.Host}";
+        var successUrl = string.IsNullOrWhiteSpace(req.SuccessUrl)
+            ? $"{origin}/gift-success?ok=1"
+            : req.SuccessUrl!;
+        var cancelUrl = string.IsNullOrWhiteSpace(req.CancelUrl)
+            ? $"{origin}/?gift=cancel"
+            : req.CancelUrl!;
 
-        // Self-serve portals
-        [HttpGet("portal/coach/{coachId:int}")]
-        public async Task<IActionResult> CoachPortal(int coachId)
-        {
-            var coach = await _db.Coaches.FirstOrDefaultAsync(c => c.Id == coachId);
-            if (coach == null || string.IsNullOrEmpty(coach.StripeCustomerId)) return NotFound();
-            var url = await _billing.CreateBillingPortalAsync(coach.StripeCustomerId, _cfg.SuccessUrl);
-            return Ok(new { url });
-        }
+        // Optional: build a nice product name
+        var productName = $"Gift to {(string.IsNullOrWhiteSpace(req.CoachName) ? "Coach" : req.CoachName)}"
+                        + (string.IsNullOrWhiteSpace(req.CoachId) ? "" : $" (#{req.CoachId})");
 
-        [HttpGet("portal/partner/{partnerId:int}")]
-        public async Task<IActionResult> PartnerPortal(int partnerId)
+        var options = new SessionCreateOptions
         {
-            var partner = await _db.Partners.FirstOrDefaultAsync(p => p.Id == partnerId);
-            if (partner == null || string.IsNullOrEmpty(partner.StripeCustomerId)) return NotFound();
-            var url = await _billing.CreateBillingPortalAsync(partner.StripeCustomerId, _cfg.SuccessUrl);
-            return Ok(new { url });
-        }
+            Mode = "payment",
+            PaymentMethodTypes = new List<string> { "card" },
+            AllowPromotionCodes = true,
+            BillingAddressCollection = "auto",
+            SubmitType = "pay",
+            LineItems = new List<SessionLineItemOptions>
+            {
+                new()
+                {
+                    PriceData = new SessionLineItemPriceDataOptions
+                    {
+                        Currency = "aed",
+                        ProductData = new SessionLineItemPriceDataProductDataOptions
+                        {
+                            Name = productName,
+                            Description = string.IsNullOrWhiteSpace(safeNote) ? null : $"Message: {safeNote}"
+                        },
+                        UnitAmount = (long)Math.Round(req.Amount * 100m) // AED -> fils
+                    },
+                    Quantity = 1
+                }
+            },
+            SuccessUrl = successUrl,
+            CancelUrl = cancelUrl,
+            Metadata = new Dictionary<string, string>
+            {
+                ["coachId"] = req.CoachId ?? "",
+                ["note"] = safeNote
+            }
+        };
+
+        var service = new SessionService();
+        var session = await service.CreateAsync(options);
+
+        return Ok(new GiftCheckoutResponse { Url = session.Url });
     }
 }
 
