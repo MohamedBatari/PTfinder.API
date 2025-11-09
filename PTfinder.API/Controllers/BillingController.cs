@@ -1,45 +1,41 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Configuration;
-using Stripe;
 using Stripe.Checkout;
 using PTfinder.API.DATA.Modules;
 
-namespace PTfinder.API.Controllers;
-
-[ApiController]
-[Route("api/[controller]")]
-public class BillingController : ControllerBase
+namespace PTfinder.API.Controllers
 {
-    private readonly IConfiguration _config;
-    public BillingController(IConfiguration config)
+    [ApiController]
+    [Route("api/[controller]")]
+    public class BillingController : ControllerBase
     {
-        _config = config;
-    }
-
-    [HttpPost("gift/checkout")]
-    public async Task<ActionResult<GiftCheckoutResponse>> CreateGiftCheckout([FromBody] GiftCheckoutRequest req)
-    {
-        try
+        // POST: /api/Billing/gift/checkout
+        [HttpPost("gift/checkout")]
+        [Consumes("application/json")]
+        [Produces("application/json")]
+        public async Task<ActionResult<GiftCheckoutResponse>> CreateGiftCheckout([FromBody] GiftCheckoutRequest? req)
         {
+            // If JSON body didn’t bind, tell the client exactly why.
             if (req == null)
-                return BadRequest(new GiftCheckoutResponse { Message = "Invalid request." });
+                return BadRequest(new GiftCheckoutResponse { Message = "Invalid JSON body. Send application/json with body { coachId, amount, note?, successUrl?, cancelUrl? }." });
 
-            if (req.Amount < 5)
-                return BadRequest(new GiftCheckoutResponse { Message = "Minimum amount is AED 5." });
+            // Normalize & validate
+            req.CoachId = (req.CoachId ?? string.Empty).Trim();
+            req.CoachName = (req.CoachName ?? string.Empty).Trim();
+            req.Note = (req.Note ?? string.Empty).Trim();
+            if (req.Note.Length > 120) req.Note = req.Note[..120];
 
-            // ✅ Ensure Stripe key is set here (works in any hosting environment)
-            var key = _config["STRIPE:SECRETKEY"] ?? _config["STRIPE__SECRETKEY"];
-            if (string.IsNullOrWhiteSpace(key))
-                return StatusCode(500, new GiftCheckoutResponse { Message = "Stripe secret key not configured." });
+            var errors = new List<string>();
+            if (string.IsNullOrWhiteSpace(req.CoachId)) errors.Add("coachId is required.");
+            if (req.Amount < 5) errors.Add("Minimum amount is AED 5.");
 
-            StripeConfiguration.ApiKey = key;
+            if (errors.Any())
+                return BadRequest(new GiftCheckoutResponse { Message = string.Join(" ", errors) });
 
-            var safeNote = (req.Note ?? string.Empty);
-            if (safeNote.Length > 120) safeNote = safeNote[..120];
-
+            // Fallback URLs
             var origin = $"{Request.Scheme}://{Request.Host}";
             var successUrl = string.IsNullOrWhiteSpace(req.SuccessUrl) ? $"{origin}/gift-success?ok=1" : req.SuccessUrl!;
             var cancelUrl = string.IsNullOrWhiteSpace(req.CancelUrl) ? $"{origin}/?gift=cancel" : req.CancelUrl!;
@@ -64,9 +60,9 @@ public class BillingController : ControllerBase
                             ProductData = new SessionLineItemPriceDataProductDataOptions
                             {
                                 Name = productName,
-                                Description = string.IsNullOrWhiteSpace(safeNote) ? null : $"Message: {safeNote}"
+                                Description = string.IsNullOrWhiteSpace(req.Note) ? null : $"Message: {req.Note}"
                             },
-                            UnitAmount = (long)Math.Round(req.Amount * 100m) // AED → fils
+                            UnitAmount = (long)Math.Round(req.Amount * 100m) // AED -> fils
                         },
                         Quantity = 1
                     }
@@ -75,24 +71,15 @@ public class BillingController : ControllerBase
                 CancelUrl = cancelUrl,
                 Metadata = new Dictionary<string, string>
                 {
-                    ["coachId"] = req.CoachId ?? "",
-                    ["note"] = safeNote
+                    ["coachId"] = req.CoachId!,
+                    ["note"] = req.Note!
                 }
             };
 
             var service = new SessionService();
             var session = await service.CreateAsync(options);
+
             return Ok(new GiftCheckoutResponse { Url = session.Url });
-        }
-        catch (StripeException se)
-        {
-            // Clear message from Stripe (bad key, disabled account, etc.)
-            return StatusCode(400, new GiftCheckoutResponse { Message = se.Message });
-        }
-        catch (Exception ex)
-        {
-            // Fallback message to help you debug
-            return StatusCode(500, new GiftCheckoutResponse { Message = $"Server error: {ex.Message}" });
         }
     }
 }
