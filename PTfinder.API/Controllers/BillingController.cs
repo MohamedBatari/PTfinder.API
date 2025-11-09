@@ -1,5 +1,8 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using PTfinder.API.DATA.Modules;
+﻿using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Mvc;
 using Stripe.Checkout;
 using PTfinder.API.DATA.Modules;
 
@@ -23,14 +26,10 @@ public class BillingController : ControllerBase
 
         // Fallback Success/Cancel URL if not provided by client
         var origin = $"{Request.Scheme}://{Request.Host}";
-        var successUrl = string.IsNullOrWhiteSpace(req.SuccessUrl)
-            ? $"{origin}/gift-success?ok=1"
-            : req.SuccessUrl!;
-        var cancelUrl = string.IsNullOrWhiteSpace(req.CancelUrl)
-            ? $"{origin}/?gift=cancel"
-            : req.CancelUrl!;
+        var successUrl = string.IsNullOrWhiteSpace(req.SuccessUrl) ? $"{origin}/gift-success?ok=1" : req.SuccessUrl!;
+        var cancelUrl = string.IsNullOrWhiteSpace(req.CancelUrl) ? $"{origin}/?gift=cancel" : req.CancelUrl!;
 
-        // Optional: build a nice product name
+        // Optional: product name
         var productName = $"Gift to {(string.IsNullOrWhiteSpace(req.CoachName) ? "Coach" : req.CoachName)}"
                         + (string.IsNullOrWhiteSpace(req.CoachId) ? "" : $" (#{req.CoachId})");
 
@@ -53,7 +52,7 @@ public class BillingController : ControllerBase
                             Name = productName,
                             Description = string.IsNullOrWhiteSpace(safeNote) ? null : $"Message: {safeNote}"
                         },
-                        UnitAmount = (long)Math.Round(req.Amount * 100m) // AED -> fils
+                        UnitAmount = (long)Math.Round(req.Amount * 100m) // AED → fils
                     },
                     Quantity = 1
                 }
@@ -73,4 +72,5 @@ public class BillingController : ControllerBase
         return Ok(new GiftCheckoutResponse { Url = session.Url });
     }
 }
+
 
