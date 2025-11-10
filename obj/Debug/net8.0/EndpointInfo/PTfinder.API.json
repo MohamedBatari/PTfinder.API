@@ -1,0 +1,4092 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "PTfinder API",
+    "version": "v1"
+  },
+  "paths": {
+    "/api/Area/city/{cityId}": {
+      "get": {
+        "tags": [
+          "Area"
+        ],
+        "parameters": [
+          {
+            "name": "cityId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Area"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Area"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Area"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Auth/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.LoginRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.LoginRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.LoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/auth/request-otp": {
+      "post": {
+        "tags": [
+          "AuthVerification"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.RequestVerificationDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.RequestVerificationDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.RequestVerificationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/auth/verify-otp": {
+      "post": {
+        "tags": [
+          "AuthVerification"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.Controllers.VerifyOtpDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.Controllers.VerifyOtpDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.Controllers.VerifyOtpDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Availability": {
+      "get": {
+        "tags": [
+          "Availability"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": { }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Availability"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.AvailabilityCreateDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.AvailabilityCreateDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.AvailabilityCreateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Availability"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Availability"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Availability"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Availability/{id}": {
+      "get": {
+        "tags": [
+          "Availability"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Availability"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.AvailabilityUpdateDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.AvailabilityUpdateDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.AvailabilityUpdateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Availability"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Availability/find": {
+      "get": {
+        "tags": [
+          "Availability"
+        ],
+        "parameters": [
+          {
+            "name": "coachId",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "date",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "timeSlot",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Billing/connect/account": {
+      "post": {
+        "tags": [
+          "Billing"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.Controllers.BillingController+ConnectAccountRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.Controllers.BillingController+ConnectAccountRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.Controllers.BillingController+ConnectAccountRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Billing/connect/account-link": {
+      "post": {
+        "tags": [
+          "Billing"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.Controllers.BillingController+ConnectAccountRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.Controllers.BillingController+ConnectAccountRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.Controllers.BillingController+ConnectAccountRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Billing/connect/status/{coachId}": {
+      "get": {
+        "tags": [
+          "Billing"
+        ],
+        "parameters": [
+          {
+            "name": "coachId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Billing/gift/checkout": {
+      "post": {
+        "tags": [
+          "Billing"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.GiftCheckoutRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.GiftCheckoutResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Billing/webhook/stripe": {
+      "post": {
+        "tags": [
+          "Billing"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Booking": {
+      "post": {
+        "tags": [
+          "Booking"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.BookingCreateDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.BookingCreateDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.BookingCreateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Booking"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Booking"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Booking"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Booking/coach/{coachId}": {
+      "get": {
+        "tags": [
+          "Booking"
+        ],
+        "parameters": [
+          {
+            "name": "coachId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Booking/{id}": {
+      "get": {
+        "tags": [
+          "Booking"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Booking"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Booking"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Booking"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Booking"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Booking/{id}/status": {
+      "put": {
+        "tags": [
+          "Booking"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.BookingStatusDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.BookingStatusDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.BookingStatusDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Categories": {
+      "get": {
+        "tags": [
+          "Categories"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Category"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Category"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Category"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Categories"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.CategoryCreateDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.CategoryCreateDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.CategoryCreateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Category"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Category"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Category"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Categories/{id}": {
+      "get": {
+        "tags": [
+          "Categories"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Category"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Category"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Category"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Categories"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.CategoryUpdateDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.CategoryUpdateDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.CategoryUpdateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Categories"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/City/country/{countryId}": {
+      "get": {
+        "tags": [
+          "City"
+        ],
+        "parameters": [
+          {
+            "name": "countryId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.City"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.City"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.City"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Coaches": {
+      "get": {
+        "tags": [
+          "Coaches"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": { }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Coaches"
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "FullName": {
+                    "type": "string"
+                  },
+                  "Email": {
+                    "type": "string"
+                  },
+                  "Password": {
+                    "type": "string"
+                  },
+                  "PhoneNumber": {
+                    "type": "string"
+                  },
+                  "Gender": {
+                    "type": "string"
+                  },
+                  "Price": {
+                    "type": "number",
+                    "format": "double"
+                  },
+                  "Description": {
+                    "type": "string"
+                  },
+                  "CountryId": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "CityId": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "AreaId": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "CategoryId": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "SpecialityId": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "ProfileImage": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              },
+              "encoding": {
+                "FullName": {
+                  "style": "form"
+                },
+                "Email": {
+                  "style": "form"
+                },
+                "Password": {
+                  "style": "form"
+                },
+                "PhoneNumber": {
+                  "style": "form"
+                },
+                "Gender": {
+                  "style": "form"
+                },
+                "Price": {
+                  "style": "form"
+                },
+                "Description": {
+                  "style": "form"
+                },
+                "CountryId": {
+                  "style": "form"
+                },
+                "CityId": {
+                  "style": "form"
+                },
+                "AreaId": {
+                  "style": "form"
+                },
+                "CategoryId": {
+                  "style": "form"
+                },
+                "SpecialityId": {
+                  "style": "form"
+                },
+                "ProfileImage": {
+                  "style": "form"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Coach"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Coach"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Coach"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Coaches/{id}": {
+      "get": {
+        "tags": [
+          "Coaches"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Coaches"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "FullName": {
+                    "type": "string"
+                  },
+                  "Email": {
+                    "type": "string"
+                  },
+                  "Password": {
+                    "type": "string"
+                  },
+                  "PhoneNumber": {
+                    "type": "string"
+                  },
+                  "Gender": {
+                    "type": "string"
+                  },
+                  "Price": {
+                    "type": "number",
+                    "format": "double"
+                  },
+                  "Description": {
+                    "type": "string"
+                  },
+                  "CountryId": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "CityId": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "AreaId": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "CategoryId": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "SpecialityId": {
+                    "type": "integer",
+                    "format": "int32"
+                  },
+                  "ProfileImage": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              },
+              "encoding": {
+                "FullName": {
+                  "style": "form"
+                },
+                "Email": {
+                  "style": "form"
+                },
+                "Password": {
+                  "style": "form"
+                },
+                "PhoneNumber": {
+                  "style": "form"
+                },
+                "Gender": {
+                  "style": "form"
+                },
+                "Price": {
+                  "style": "form"
+                },
+                "Description": {
+                  "style": "form"
+                },
+                "CountryId": {
+                  "style": "form"
+                },
+                "CityId": {
+                  "style": "form"
+                },
+                "AreaId": {
+                  "style": "form"
+                },
+                "CategoryId": {
+                  "style": "form"
+                },
+                "SpecialityId": {
+                  "style": "form"
+                },
+                "ProfileImage": {
+                  "style": "form"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Coaches"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Coaches/check-email": {
+      "get": {
+        "tags": [
+          "Coaches"
+        ],
+        "parameters": [
+          {
+            "name": "email",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Coaches/Search": {
+      "get": {
+        "tags": [
+          "Coaches"
+        ],
+        "parameters": [
+          {
+            "name": "CategoryId",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "SpecialityId",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "CountryId",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "CityId",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "AreaId",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "Gender",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "FullName",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Coaches/Names": {
+      "get": {
+        "tags": [
+          "Coaches"
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "take",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1000
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Country": {
+      "get": {
+        "tags": [
+          "Country"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Country"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Country"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Country"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/debug/dbping": {
+      "get": {
+        "tags": [
+          "Debug"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/debug/migrations": {
+      "get": {
+        "tags": [
+          "Debug"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Emails/verify-link": {
+      "post": {
+        "tags": [
+          "Emails"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.VerifyLinkEmailDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.VerifyLinkEmailDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.VerifyLinkEmailDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Emails/verify-otp": {
+      "post": {
+        "tags": [
+          "Emails"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.VerifyOtpEmailDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.VerifyOtpEmailDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.VerifyOtpEmailDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Emails/email-verified": {
+      "post": {
+        "tags": [
+          "Emails"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.EmailVerifiedEmailDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.EmailVerifiedEmailDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.EmailVerifiedEmailDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Emails/email-verified-coach": {
+      "post": {
+        "tags": [
+          "Emails"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.EmailVerifiedEmailDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.EmailVerifiedEmailDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.EmailVerifiedEmailDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Emails/welcome": {
+      "post": {
+        "tags": [
+          "Emails"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.WelcomeEmailDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.WelcomeEmailDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.WelcomeEmailDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Emails/welcome-client": {
+      "post": {
+        "tags": [
+          "Emails"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.WelcomeEmailDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.WelcomeEmailDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.WelcomeEmailDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Emails/reset-password": {
+      "post": {
+        "tags": [
+          "Emails"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.ResetPasswordEmailDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.ResetPasswordEmailDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.ResetPasswordEmailDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Emails/booking/request-pt": {
+      "post": {
+        "tags": [
+          "Emails"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.BookingRequestPtEmailDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.BookingRequestPtEmailDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.BookingRequestPtEmailDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Emails/booking/request-client": {
+      "post": {
+        "tags": [
+          "Emails"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.BookingRequestClientEmailDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.BookingRequestClientEmailDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.BookingRequestClientEmailDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Emails/booking/confirmed-client": {
+      "post": {
+        "tags": [
+          "Emails"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.BookingConfirmedClientEmailDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.BookingConfirmedClientEmailDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.BookingConfirmedClientEmailDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Emails/booking/confirmed-pt": {
+      "post": {
+        "tags": [
+          "Emails"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.BookingConfirmedPtEmailDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.BookingConfirmedPtEmailDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.BookingConfirmedPtEmailDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Emails/booking/cancelled-by-pt": {
+      "post": {
+        "tags": [
+          "Emails"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.BookingCancelledByPtEmailDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.BookingCancelledByPtEmailDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.BookingCancelledByPtEmailDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Emails/booking/declined-by-pt": {
+      "post": {
+        "tags": [
+          "Emails"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.BookingCancelledByPtEmailDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.BookingCancelledByPtEmailDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.BookingCancelledByPtEmailDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/GalleryMedia/coach/{coachId}": {
+      "get": {
+        "tags": [
+          "GalleryMedia"
+        ],
+        "parameters": [
+          {
+            "name": "coachId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.GalleryMediaDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.GalleryMediaDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.GalleryMediaDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/GalleryMedia/upload": {
+      "post": {
+        "tags": [
+          "GalleryMedia"
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "File": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "MediaType": {
+                    "type": "string"
+                  },
+                  "CoachId": {
+                    "type": "integer",
+                    "format": "int32"
+                  }
+                }
+              },
+              "encoding": {
+                "File": {
+                  "style": "form"
+                },
+                "MediaType": {
+                  "style": "form"
+                },
+                "CoachId": {
+                  "style": "form"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/GalleryMedia/{id}": {
+      "delete": {
+        "tags": [
+          "GalleryMedia"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Notifications/coach/{coachId}": {
+      "get": {
+        "tags": [
+          "Notifications"
+        ],
+        "parameters": [
+          {
+            "name": "coachId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "unreadOnly",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Notifications/{id}/read": {
+      "post": {
+        "tags": [
+          "Notifications"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Notifications/coach/{coachId}/read-all": {
+      "post": {
+        "tags": [
+          "Notifications"
+        ],
+        "parameters": [
+          {
+            "name": "coachId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Partners": {
+      "get": {
+        "tags": [
+          "Partners"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PTfinder.API.Controllers.PartnersController+PartnerReadDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PTfinder.API.Controllers.PartnersController+PartnerReadDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PTfinder.API.Controllers.PartnersController+PartnerReadDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Partners"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.Controllers.PartnersController+PartnerCreateUpdateDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.Controllers.PartnersController+PartnerCreateUpdateDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.Controllers.PartnersController+PartnerCreateUpdateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Partner"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Partner"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Partner"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Partners/{id}": {
+      "get": {
+        "tags": [
+          "Partners"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Partner"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Partner"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Partner"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Partners"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.Controllers.PartnersController+PartnerCreateUpdateDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.Controllers.PartnersController+PartnerCreateUpdateDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.Controllers.PartnersController+PartnerCreateUpdateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Partners"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Partners/{id}/coaches": {
+      "get": {
+        "tags": [
+          "Partners"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Partners/{partnerId}/assign-coach/{coachId}": {
+      "post": {
+        "tags": [
+          "Partners"
+        ],
+        "parameters": [
+          {
+            "name": "partnerId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "coachId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Partners/{partnerId}/remove-coach/{coachId}": {
+      "delete": {
+        "tags": [
+          "Partners"
+        ],
+        "parameters": [
+          {
+            "name": "partnerId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "coachId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Partners/{id}/stats": {
+      "get": {
+        "tags": [
+          "Partners"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "PTfinder.API"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/debug/config": {
+      "get": {
+        "tags": [
+          "PTfinder.API"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Reviews/coach/{coachId}": {
+      "get": {
+        "tags": [
+          "Reviews"
+        ],
+        "parameters": [
+          {
+            "name": "coachId",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Reviews": {
+      "post": {
+        "tags": [
+          "Reviews"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewCreateDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewCreateDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewCreateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Specialities/{id}": {
+      "get": {
+        "tags": [
+          "Specialities"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Speciality"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Speciality"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Speciality"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Specialities"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.SpecialityUpdateDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.SpecialityUpdateDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.SpecialityUpdateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Specialities"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/Specialities": {
+      "get": {
+        "tags": [
+          "Specialities"
+        ],
+        "parameters": [
+          {
+            "name": "categoryId",
+            "in": "query",
+            "style": "form",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Specialities"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.SpecialityCreateDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.SpecialityCreateDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.DATA.DTO.SpecialityCreateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/stripe/webhook": {
+      "post": {
+        "tags": [
+          "StripeWebhook"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/stripe/webhook/mock-activate": {
+      "post": {
+        "tags": [
+          "StripeWebhook"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.Controllers.StripeWebhookController+MockActivateDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.Controllers.StripeWebhookController+MockActivateDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PTfinder.API.Controllers.StripeWebhookController+MockActivateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/WeatherForecast": {
+      "get": {
+        "tags": [
+          "WeatherForecast"
+        ],
+        "operationId": "GetWeatherForecast",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PTfinder.API.WeatherForecast"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PTfinder.API.WeatherForecast"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PTfinder.API.WeatherForecast"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "PTfinder.API.Controllers.BillingController+ConnectAccountRequest": {
+        "type": "object",
+        "properties": {
+          "coachId": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.Controllers.PartnersController+PartnerCreateUpdateDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "logoUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "email": {
+            "type": "string",
+            "nullable": true
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "address": {
+            "type": "string",
+            "nullable": true
+          },
+          "planName": {
+            "type": "string",
+            "nullable": true
+          },
+          "maxCoaches": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pricePerMonth": {
+            "type": "number",
+            "format": "double"
+          },
+          "pricePerYear": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.Controllers.PartnersController+PartnerReadDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "logoUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "planName": {
+            "type": "string",
+            "nullable": true
+          },
+          "maxCoaches": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "coachCount": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.Controllers.StripeWebhookController+MockActivateDto": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "nullable": true
+          },
+          "coachId": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "partnerId": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "tier": {
+            "type": "string",
+            "nullable": true
+          },
+          "interval": {
+            "type": "string",
+            "nullable": true
+          },
+          "plan": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.Controllers.VerifyOtpDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "nullable": true
+          },
+          "code": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.DATA.DTO.AvailabilityCreateDto": {
+        "type": "object",
+        "properties": {
+          "coachId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "availableDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "timeSlot": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.DATA.DTO.AvailabilityUpdateDto": {
+        "type": "object",
+        "properties": {
+          "availableDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "timeSlot": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.DATA.DTO.BookingCancelledByPtEmailDto": {
+        "required": [
+          "location",
+          "ptName",
+          "searchUrl",
+          "serviceName",
+          "timezone",
+          "to"
+        ],
+        "type": "object",
+        "properties": {
+          "to": {
+            "minLength": 1,
+            "type": "string",
+            "format": "email"
+          },
+          "ptName": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "serviceName": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "startsAtLocal": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "timezone": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "location": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "searchUrl": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.DATA.DTO.BookingConfirmedClientEmailDto": {
+        "required": [
+          "bookingId",
+          "location",
+          "manageUrl",
+          "price",
+          "ptName",
+          "serviceName",
+          "timezone",
+          "to"
+        ],
+        "type": "object",
+        "properties": {
+          "to": {
+            "minLength": 1,
+            "type": "string",
+            "format": "email"
+          },
+          "ptName": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "serviceName": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "startsAtLocal": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "timezone": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "location": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "durationMinutes": {
+            "maximum": 240,
+            "minimum": 15,
+            "type": "integer",
+            "format": "int32"
+          },
+          "price": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "manageUrl": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "addIcs": {
+            "type": "boolean"
+          },
+          "bookingId": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.DATA.DTO.BookingConfirmedPtEmailDto": {
+        "required": [
+          "clientName",
+          "location",
+          "price",
+          "serviceName",
+          "timezone",
+          "to"
+        ],
+        "type": "object",
+        "properties": {
+          "to": {
+            "minLength": 1,
+            "type": "string",
+            "format": "email"
+          },
+          "clientName": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "serviceName": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "startsAtLocal": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "timezone": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "location": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "durationMinutes": {
+            "maximum": 240,
+            "minimum": 15,
+            "type": "integer",
+            "format": "int32"
+          },
+          "price": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.DATA.DTO.BookingCreateDto": {
+        "type": "object",
+        "properties": {
+          "coachId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "studentName": {
+            "type": "string",
+            "nullable": true
+          },
+          "studentEmail": {
+            "type": "string",
+            "nullable": true
+          },
+          "studentPhone": {
+            "type": "string",
+            "nullable": true
+          },
+          "bookingDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "timeSlot": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.DATA.DTO.BookingRequestClientEmailDto": {
+        "required": [
+          "location",
+          "manageUrl",
+          "ptName",
+          "serviceName",
+          "timezone",
+          "to"
+        ],
+        "type": "object",
+        "properties": {
+          "to": {
+            "minLength": 1,
+            "type": "string",
+            "format": "email"
+          },
+          "ptName": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "serviceName": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "startsAtLocal": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "timezone": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "location": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "manageUrl": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.DATA.DTO.BookingRequestPtEmailDto": {
+        "required": [
+          "clientName",
+          "confirmUrl",
+          "declineUrl",
+          "location",
+          "price",
+          "serviceName",
+          "timezone",
+          "to"
+        ],
+        "type": "object",
+        "properties": {
+          "to": {
+            "minLength": 1,
+            "type": "string",
+            "format": "email"
+          },
+          "clientName": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "serviceName": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "startsAtLocal": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "timezone": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "location": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "durationMinutes": {
+            "maximum": 240,
+            "minimum": 15,
+            "type": "integer",
+            "format": "int32"
+          },
+          "price": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "confirmUrl": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "declineUrl": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "responseSlaHours": {
+            "maximum": 72,
+            "minimum": 1,
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.DATA.DTO.BookingStatusDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/PTfinder.API.Enums.BookingStatus"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.DATA.DTO.CategoryCreateDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.DATA.DTO.CategoryUpdateDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.DATA.DTO.EmailVerifiedEmailDto": {
+        "required": [
+          "dashboardUrl",
+          "to"
+        ],
+        "type": "object",
+        "properties": {
+          "to": {
+            "minLength": 1,
+            "type": "string",
+            "format": "email"
+          },
+          "firstName": {
+            "type": "string",
+            "nullable": true
+          },
+          "dashboardUrl": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.DATA.DTO.GalleryMediaDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "url": {
+            "type": "string",
+            "nullable": true
+          },
+          "mediaType": {
+            "type": "string",
+            "nullable": true
+          },
+          "coachId": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.DATA.DTO.RequestVerificationDto": {
+        "required": [
+          "email"
+        ],
+        "type": "object",
+        "properties": {
+          "email": {
+            "minLength": 1,
+            "type": "string",
+            "format": "email"
+          },
+          "expiresMinutes": {
+            "maximum": 1440,
+            "minimum": 5,
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.DATA.DTO.ResetPasswordEmailDto": {
+        "required": [
+          "email",
+          "resetLink",
+          "to"
+        ],
+        "type": "object",
+        "properties": {
+          "to": {
+            "minLength": 1,
+            "type": "string",
+            "format": "email"
+          },
+          "email": {
+            "minLength": 1,
+            "type": "string",
+            "format": "email"
+          },
+          "resetLink": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "expiresMinutes": {
+            "maximum": 1440,
+            "minimum": 5,
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.DATA.DTO.SpecialityCreateDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "categoryId": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.DATA.DTO.SpecialityUpdateDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "categoryId": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.DATA.DTO.VerifyLinkEmailDto": {
+        "required": [
+          "to",
+          "verifyUrl"
+        ],
+        "type": "object",
+        "properties": {
+          "to": {
+            "minLength": 1,
+            "type": "string",
+            "format": "email"
+          },
+          "firstName": {
+            "type": "string",
+            "nullable": true
+          },
+          "verifyUrl": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "expiresMinutes": {
+            "maximum": 1440,
+            "minimum": 5,
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.DATA.DTO.VerifyOtpEmailDto": {
+        "required": [
+          "code",
+          "to"
+        ],
+        "type": "object",
+        "properties": {
+          "to": {
+            "minLength": 1,
+            "type": "string",
+            "format": "email"
+          },
+          "firstName": {
+            "type": "string",
+            "nullable": true
+          },
+          "code": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "expiresMinutes": {
+            "maximum": 60,
+            "minimum": 1,
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.DATA.DTO.WelcomeEmailDto": {
+        "required": [
+          "dashboardUrl",
+          "to"
+        ],
+        "type": "object",
+        "properties": {
+          "to": {
+            "minLength": 1,
+            "type": "string",
+            "format": "email"
+          },
+          "firstName": {
+            "type": "string",
+            "nullable": true
+          },
+          "dashboardUrl": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.DATA.Modules.Area": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "cityId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "city": {
+            "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.City"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.DATA.Modules.Availability": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "coachId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "coach": {
+            "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Coach"
+          },
+          "availableDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "timeSlot": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.DATA.Modules.Booking": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "coachId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "coach": {
+            "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Coach"
+          },
+          "studentName": {
+            "type": "string",
+            "nullable": true
+          },
+          "studentEmail": {
+            "type": "string",
+            "nullable": true
+          },
+          "studentPhone": {
+            "type": "string",
+            "nullable": true
+          },
+          "bookingDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "timeSlot": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "$ref": "#/components/schemas/PTfinder.API.Enums.BookingStatus"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.DATA.Modules.Category": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "specialities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Speciality"
+            },
+            "nullable": true
+          },
+          "coaches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Coach"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.DATA.Modules.City": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "countryId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "country": {
+            "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Country"
+          },
+          "areas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Area"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.DATA.Modules.Coach": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "fullName": {
+            "type": "string",
+            "nullable": true
+          },
+          "email": {
+            "type": "string",
+            "nullable": true
+          },
+          "password": {
+            "type": "string",
+            "nullable": true
+          },
+          "phoneNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "gender": {
+            "type": "string",
+            "nullable": true
+          },
+          "price": {
+            "type": "number",
+            "format": "double"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "stripeAccountId": {
+            "type": "string",
+            "nullable": true
+          },
+          "countryId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "country": {
+            "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Country"
+          },
+          "cityId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "city": {
+            "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.City"
+          },
+          "areaId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "area": {
+            "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Area"
+          },
+          "categoryId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "category": {
+            "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Category"
+          },
+          "specialityId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "speciality": {
+            "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Speciality"
+          },
+          "profileImage": {
+            "type": "string",
+            "nullable": true
+          },
+          "emailVerified": {
+            "type": "boolean"
+          },
+          "emailVerificationToken": {
+            "type": "string",
+            "nullable": true
+          },
+          "emailVerificationExpiresUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "availabilities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Availability"
+            },
+            "nullable": true
+          },
+          "bookings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Booking"
+            },
+            "nullable": true
+          },
+          "reviews": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Review"
+            },
+            "nullable": true
+          },
+          "subscriptions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Subscription"
+            },
+            "nullable": true
+          },
+          "galleryMedia": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.GalleryMedia"
+            },
+            "nullable": true
+          },
+          "partnerId": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "partner": {
+            "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Partner"
+          },
+          "subscriptionTier": {
+            "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.SubscriptionTier"
+          },
+          "subscriptionStatus": {
+            "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.SubscriptionStatus"
+          },
+          "subscriptionStartedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "subscriptionExpiresAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "stripeCustomerId": {
+            "type": "string",
+            "nullable": true
+          },
+          "stripeSubscriptionId": {
+            "type": "string",
+            "nullable": true
+          },
+          "currentPeriodEndUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "createdAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "effectiveTier": {
+            "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.SubscriptionTier"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.DATA.Modules.Country": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "cities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.City"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.DATA.Modules.GalleryMedia": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "url": {
+            "type": "string",
+            "nullable": true
+          },
+          "mediaType": {
+            "type": "string",
+            "nullable": true
+          },
+          "coachId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "coach": {
+            "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Coach"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.DATA.Modules.GiftCheckoutRequest": {
+        "type": "object",
+        "properties": {
+          "coachId": {
+            "type": "string",
+            "nullable": true
+          },
+          "coachName": {
+            "type": "string",
+            "nullable": true
+          },
+          "amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "note": {
+            "type": "string",
+            "nullable": true
+          },
+          "successUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "cancelUrl": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.DATA.Modules.GiftCheckoutResponse": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "nullable": true
+          },
+          "message": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.DATA.Modules.LoginRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "nullable": true
+          },
+          "password": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.DATA.Modules.Partner": {
+        "required": [
+          "name",
+          "planName"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "name": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "logoUrl": {
+            "maxLength": 300,
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "maxLength": 2000,
+            "type": "string",
+            "nullable": true
+          },
+          "email": {
+            "maxLength": 160,
+            "type": "string",
+            "nullable": true
+          },
+          "phone": {
+            "maxLength": 40,
+            "type": "string",
+            "nullable": true
+          },
+          "address": {
+            "maxLength": 300,
+            "type": "string",
+            "nullable": true
+          },
+          "planName": {
+            "maxLength": 80,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxCoaches": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pricePerMonth": {
+            "type": "number",
+            "format": "double"
+          },
+          "pricePerYear": {
+            "type": "number",
+            "format": "double"
+          },
+          "stripeCustomerId": {
+            "type": "string",
+            "nullable": true
+          },
+          "stripeSubscriptionId": {
+            "type": "string",
+            "nullable": true
+          },
+          "stripePriceId": {
+            "type": "string",
+            "nullable": true
+          },
+          "currentPeriodEndUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "createdAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "coaches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Coach"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.DATA.Modules.Speciality": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "categoryId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "category": {
+            "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Category"
+          },
+          "coaches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Coach"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.DATA.Modules.Subscription": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "coachId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "coach": {
+            "$ref": "#/components/schemas/PTfinder.API.DATA.Modules.Coach"
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "isActive": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PTfinder.API.DATA.Modules.SubscriptionStatus": {
+        "enum": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "PTfinder.API.DATA.Modules.SubscriptionTier": {
+        "enum": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "PTfinder.API.Enums.BookingStatus": {
+        "enum": [
+          0,
+          1,
+          2
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "PTfinder.API.WeatherForecast": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "$ref": "#/components/schemas/System.DateOnly"
+          },
+          "temperatureC": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "temperatureF": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          },
+          "summary": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Review": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "coachId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "studentName": {
+            "type": "string",
+            "nullable": true
+          },
+          "comment": {
+            "type": "string",
+            "nullable": true
+          },
+          "rating": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "studentEmail": {
+            "type": "string",
+            "nullable": true
+          },
+          "googleSub": {
+            "type": "string",
+            "nullable": true
+          },
+          "avatarUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "googleVerified": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReviewCreateDto": {
+        "type": "object",
+        "properties": {
+          "coachId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "comment": {
+            "type": "string",
+            "nullable": true
+          },
+          "rating": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "googleIdToken": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "System.DateOnly": {
+        "type": "object",
+        "properties": {
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "month": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "day": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "dayOfWeek": {
+            "$ref": "#/components/schemas/System.DayOfWeek"
+          },
+          "dayOfYear": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          },
+          "dayNumber": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "System.DayOfWeek": {
+        "enum": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "type": "integer",
+        "format": "int32"
+      }
+    },
+    "securitySchemes": {
+      "Bearer": {
+        "type": "http",
+        "description": "Enter: Bearer {your JWT}",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "security": [
+    {
+      "Bearer": [ ]
+    }
+  ]
+}

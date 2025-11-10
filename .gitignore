@@ -1,8 +1,0 @@
-
-# Build artifacts
-/bin/
-/obj/
-*.user
-*.suo
-*.log
-
