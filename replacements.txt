@@ -1,0 +1,6 @@
+regex:sk_(live|test)_[A-Za-z0-9]+
+==>STRIPE_SECRET_REMOVED
+regex:pk_(live|test)_[A-Za-z0-9]+
+==>STRIPE_PUBLISHABLE_REMOVED
+regex:whsec_[A-Za-z0-9]+
+==>STRIPE_WEBHOOK_REMOVED
