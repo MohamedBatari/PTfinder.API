@@ -33,6 +33,7 @@ namespace PTfinder.API.DATA.Modules
         public string Gender { get; set; }
         public decimal Price { get; set; }
         public string Description { get; set; }
+        public string? StripeAccountId { get; set; }
 
         public int CountryId { get; set; }
         public Country Country { get; set; }

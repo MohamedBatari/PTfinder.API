@@ -225,6 +225,9 @@ namespace PTfinder.API.Migrations
                     b.Property<int>("SpecialityId")
                         .HasColumnType("int");
 
+                    b.Property<string>("StripeAccountId")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("StripeCustomerId")
                         .HasColumnType("nvarchar(max)");
 
@@ -263,6 +266,61 @@ namespace PTfinder.API.Migrations
                     b.HasIndex("SpecialityId");
 
                     b.ToTable("Coaches");
+                });
+
+            modelBuilder.Entity("PTfinder.API.DATA.Modules.CoachGift", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<long>("AmountMinor")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("CoachId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("GETUTCDATE()");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.Property<string>("DonorEmail")
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<string>("StripePaymentIntentId")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("StripeSessionId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CoachId");
+
+                    b.HasIndex("CreatedUtc");
+
+                    b.ToTable("CoachGifts");
                 });
 
             modelBuilder.Entity("PTfinder.API.DATA.Modules.Country", b =>
@@ -668,6 +726,17 @@ namespace PTfinder.API.Migrations
                     b.Navigation("Partner");
 
                     b.Navigation("Speciality");
+                });
+
+            modelBuilder.Entity("PTfinder.API.DATA.Modules.CoachGift", b =>
+                {
+                    b.HasOne("PTfinder.API.DATA.Modules.Coach", "Coach")
+                        .WithMany()
+                        .HasForeignKey("CoachId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Coach");
                 });
 
             modelBuilder.Entity("PTfinder.API.DATA.Modules.GalleryMedia", b =>

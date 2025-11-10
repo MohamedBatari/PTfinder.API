@@ -21,6 +21,8 @@ namespace PTfinder.API.DATA
         public DbSet<GalleryMedia> GalleryMedia { get; set; } = null!;
         public DbSet<EmailOtp> EmailOtps { get; set; } = default!;
         public DbSet<Notification> Notifications { get; set; } = null!;
+        public DbSet<CoachGift> CoachGifts { get; set; } = null!;
+
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -109,6 +111,28 @@ namespace PTfinder.API.DATA
                 e.Property(x => x.Link).HasMaxLength(512);
                 e.Property(x => x.CreatedAtUtc).HasDefaultValueSql("GETUTCDATE()");
             });
+            // Gifts
+            modelBuilder.Entity<CoachGift>(e =>
+            {
+                e.HasKey(x => x.Id);
+                e.Property(x => x.AmountMinor).IsRequired();
+                e.Property(x => x.Currency).HasMaxLength(10).IsRequired();
+                e.Property(x => x.Note).HasMaxLength(200);
+                e.Property(x => x.StripeSessionId).HasMaxLength(200).IsRequired();
+                e.Property(x => x.StripePaymentIntentId).HasMaxLength(200);
+                e.Property(x => x.Status).HasMaxLength(40).IsRequired();
+                e.Property(x => x.DonorEmail).HasMaxLength(320);
+                e.Property(x => x.CreatedUtc).HasDefaultValueSql("GETUTCDATE()");
+
+                e.HasIndex(x => x.CoachId);
+                e.HasIndex(x => x.CreatedUtc);
+
+                e.HasOne(x => x.Coach)
+                    .WithMany() // or .WithMany(c => c.Gifts) if you add a collection on Coach
+                    .HasForeignKey(x => x.CoachId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
 
             modelBuilder.Entity<Coach>()
     .HasOne(c => c.Partner)
