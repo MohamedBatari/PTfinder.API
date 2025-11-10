@@ -15,6 +15,7 @@ namespace PTfinder.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Produces("application/json")]
     public class BillingController : ControllerBase
     {
         private readonly AppDbContext _db;
@@ -24,15 +25,21 @@ namespace PTfinder.API.Controllers
         {
             _db = db;
             _cfg = cfg;
-            StripeConfiguration.ApiKey = _cfg["Stripe:SecretKey"];
+
+            // Read from either key format (Azure maps ":" to "__")
+            var key = _cfg["Stripe:SecretKey"] ?? _cfg["Stripe__SecretKey"];
+            StripeConfiguration.ApiKey = key;
         }
 
         private string FrontendBase =>
-            _cfg["Stripe:FrontendBase"]?.TrimEnd('/') ?? $"{Request.Scheme}://{Request.Host}";
+            (_cfg["Stripe:FrontendBase"] ?? _cfg["Stripe__FrontendBase"])?.TrimEnd('/')
+            ?? $"{Request.Scheme}://{Request.Host}";
 
         // Small helper to parse coachId safely
         private static bool TryCoachId(string? s, out int id) =>
             int.TryParse((s ?? "").Trim(), out id);
+
+        private bool HasStripeKey() => !string.IsNullOrWhiteSpace(StripeConfiguration.ApiKey);
 
         // =====================================================================
         // Stripe Connect: create/fetch account for a coach
@@ -48,31 +55,53 @@ namespace PTfinder.API.Controllers
             if (!TryCoachId(coachIdStr, out var coachIdInt))
                 return BadRequest(new { message = "coachId must be an integer" });
 
+            if (!HasStripeKey())
+                return StatusCode(500, new { message = "Stripe secret key missing (Stripe:SecretKey / Stripe__SecretKey)" });
+
             var coach = await _db.Coaches.FirstOrDefaultAsync(c => c.Id == coachIdInt);
             if (coach == null) return NotFound(new { message = "Coach not found" });
 
             if (!string.IsNullOrWhiteSpace(coach.StripeAccountId))
                 return Ok(new { accountId = coach.StripeAccountId });
 
-            var acctSvc = new AccountService();
-            var acct = await acctSvc.CreateAsync(new AccountCreateOptions
+            try
             {
-                Country = "AE",
-                Type = "express",
-                Email = string.IsNullOrWhiteSpace(coach.Email) ? null : coach.Email,
-                DefaultCurrency = "aed",
-                Capabilities = new AccountCapabilitiesOptions
+                var acctSvc = new AccountService();
+                var acct = await acctSvc.CreateAsync(new AccountCreateOptions
                 {
-                    CardPayments = new AccountCapabilitiesCardPaymentsOptions { Requested = true },
-                    Transfers = new AccountCapabilitiesTransfersOptions { Requested = true },
-                },
-                BusinessType = "individual"
-            });
+                    Country = "AE",
+                    Type = "express",
+                    Email = string.IsNullOrWhiteSpace(coach.Email) ? null : coach.Email,
+                    DefaultCurrency = "aed",
+                    Capabilities = new AccountCapabilitiesOptions
+                    {
+                        CardPayments = new AccountCapabilitiesCardPaymentsOptions { Requested = true },
+                        Transfers = new AccountCapabilitiesTransfersOptions { Requested = true },
+                    },
+                    BusinessType = "individual"
+                });
 
-            coach.StripeAccountId = acct.Id;
-            await _db.SaveChangesAsync();
+                coach.StripeAccountId = acct.Id;
+                await _db.SaveChangesAsync();
 
-            return Ok(new { accountId = acct.Id });
+                return Ok(new { accountId = acct.Id });
+            }
+            catch (StripeException sx)
+            {
+                return StatusCode(502, new
+                {
+                    message = "Stripe error",
+                    type = sx.StripeError?.Type,
+                    code = sx.StripeError?.Code,
+                    param = sx.StripeError?.Param,
+                    decline_code = sx.StripeError?.DeclineCode,
+                    error_message = sx.StripeError?.Message
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Server error creating connect account", error = ex.Message });
+            }
         }
 
         // POST /api/Billing/connect/account-link
@@ -83,19 +112,44 @@ namespace PTfinder.API.Controllers
             if (!TryCoachId(coachIdStr, out var coachIdInt))
                 return BadRequest(new { message = "coachId must be an integer" });
 
+            if (!HasStripeKey())
+                return StatusCode(500, new { message = "Stripe secret key missing (Stripe:SecretKey / Stripe__SecretKey)" });
+
             var coach = await _db.Coaches.FirstOrDefaultAsync(c => c.Id == coachIdInt);
-            if (coach == null || string.IsNullOrWhiteSpace(coach.StripeAccountId))
+            if (coach == null)
+                return NotFound(new { message = "Coach not found" });
+
+            if (string.IsNullOrWhiteSpace(coach.StripeAccountId))
                 return BadRequest(new { message = "Coach missing Stripe account. Call /connect/account first." });
 
-            var linkSvc = new AccountLinkService();
-            var link = await linkSvc.CreateAsync(new AccountLinkCreateOptions
+            try
             {
-                Account = coach.StripeAccountId,
-                Type = "account_onboarding",
-                RefreshUrl = $"{FrontendBase}/dashboard/gifts?stripe=refresh",
-                ReturnUrl = $"{FrontendBase}/dashboard/gifts?stripe=done"
-            });
-            return Ok(new { url = link.Url });
+                var linkSvc = new AccountLinkService();
+                var link = await linkSvc.CreateAsync(new AccountLinkCreateOptions
+                {
+                    Account = coach.StripeAccountId,
+                    Type = "account_onboarding",
+                    RefreshUrl = $"{FrontendBase}/dashboard/gifts?stripe=refresh",
+                    ReturnUrl = $"{FrontendBase}/dashboard/gifts?stripe=done"
+                });
+
+                return Ok(new { url = link.Url });
+            }
+            catch (StripeException sx)
+            {
+                return StatusCode(502, new
+                {
+                    message = "Stripe error",
+                    type = sx.StripeError?.Type,
+                    code = sx.StripeError?.Code,
+                    param = sx.StripeError?.Param,
+                    error_message = sx.StripeError?.Message
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Server error creating account link", error = ex.Message });
+            }
         }
 
         // GET /api/Billing/connect/status/{coachId}
@@ -104,6 +158,9 @@ namespace PTfinder.API.Controllers
         {
             if (!TryCoachId(coachId, out var coachIdInt))
                 return BadRequest(new { message = "coachId must be an integer" });
+
+            if (!HasStripeKey())
+                return StatusCode(500, new { message = "Stripe secret key missing (Stripe:SecretKey / Stripe__SecretKey)" });
 
             var coach = await _db.Coaches.FirstOrDefaultAsync(c => c.Id == coachIdInt);
             if (coach == null) return NotFound(new { message = "Coach not found" });
@@ -131,7 +188,6 @@ namespace PTfinder.API.Controllers
         // POST: /api/Billing/gift/checkout
         [HttpPost("gift/checkout")]
         [Consumes("application/json")]
-        [Produces("application/json")]
         public async Task<ActionResult<GiftCheckoutResponse>> CreateGiftCheckout([FromBody] GiftCheckoutRequest? req)
         {
             if (req == null)
@@ -151,6 +207,9 @@ namespace PTfinder.API.Controllers
             if (!TryCoachId(req.CoachId, out var coachIdInt))
                 return BadRequest(new GiftCheckoutResponse { Message = "coachId must be an integer" });
 
+            if (!HasStripeKey())
+                return StatusCode(500, new GiftCheckoutResponse { Message = "Stripe secret key missing (Stripe:SecretKey / Stripe__SecretKey)" });
+
             var coach = await _db.Coaches.FirstOrDefaultAsync(c => c.Id == coachIdInt);
             if (coach == null)
                 return NotFound(new GiftCheckoutResponse { Message = "Coach not found." });
@@ -165,61 +224,76 @@ namespace PTfinder.API.Controllers
             var productName = $"Gift to {(string.IsNullOrWhiteSpace(req.CoachName) ? "Coach" : req.CoachName)} (#{coachIdInt})";
 
             long amountMinor = (long)Math.Round(req.Amount * 100m);
+            long appFee = (long)Math.Round(amountMinor * 0.20m); // 20% platform fee example
 
-            // Platform fee: 20% example. Change this percentage for your share.
-            long appFee = (long)Math.Round(amountMinor * 0.20m);
-
-            var options = new SessionCreateOptions
+            try
             {
-                Mode = "payment",
-                PaymentMethodTypes = new List<string> { "card" },
-                AllowPromotionCodes = true,
-                BillingAddressCollection = "auto",
-                SubmitType = "pay",
-                LineItems = new List<SessionLineItemOptions>
+                var options = new SessionCreateOptions
                 {
-                    new()
+                    Mode = "payment",
+                    PaymentMethodTypes = new List<string> { "card" },
+                    AllowPromotionCodes = true,
+                    BillingAddressCollection = "auto",
+                    SubmitType = "pay",
+                    LineItems = new List<SessionLineItemOptions>
                     {
-                        PriceData = new SessionLineItemPriceDataOptions
+                        new()
                         {
-                            Currency = "aed",
-                            ProductData = new SessionLineItemPriceDataProductDataOptions
+                            PriceData = new SessionLineItemPriceDataOptions
                             {
-                                Name = productName,
-                                Description = string.IsNullOrWhiteSpace(req.Note) ? null : $"Message: {req.Note}"
+                                Currency = "aed",
+                                ProductData = new SessionLineItemPriceDataProductDataOptions
+                                {
+                                    Name = productName,
+                                    Description = string.IsNullOrWhiteSpace(req.Note) ? null : $"Message: {req.Note}"
+                                },
+                                UnitAmount = amountMinor
                             },
-                            UnitAmount = amountMinor
-                        },
-                        Quantity = 1
-                    }
-                },
-                SuccessUrl = successUrl,
-                CancelUrl = cancelUrl,
-                PaymentIntentData = new SessionPaymentIntentDataOptions
-                {
-                    ApplicationFeeAmount = appFee,
-                    TransferData = new SessionPaymentIntentDataTransferDataOptions
+                            Quantity = 1
+                        }
+                    },
+                    SuccessUrl = successUrl,
+                    CancelUrl = cancelUrl,
+                    PaymentIntentData = new SessionPaymentIntentDataOptions
                     {
-                        Destination = coach.StripeAccountId
+                        ApplicationFeeAmount = appFee,
+                        TransferData = new SessionPaymentIntentDataTransferDataOptions
+                        {
+                            Destination = coach.StripeAccountId
+                        },
+                        Metadata = new Dictionary<string, string>
+                        {
+                            ["coachId"] = coachIdInt.ToString(),
+                            ["coachName"] = req.CoachName ?? "",
+                            ["note"] = req.Note ?? ""
+                        }
                     },
                     Metadata = new Dictionary<string, string>
                     {
                         ["coachId"] = coachIdInt.ToString(),
-                        ["coachName"] = req.CoachName!,
-                        ["note"] = req.Note!
+                        ["note"] = req.Note ?? ""
                     }
-                },
-                Metadata = new Dictionary<string, string>
+                };
+
+                var service = new SessionService();
+                var session = await service.CreateAsync(options);
+
+                return Ok(new GiftCheckoutResponse { Url = session.Url, Message = "ok" });
+            }
+            catch (StripeException sx)
+            {
+                return StatusCode(502, new GiftCheckoutResponse
                 {
-                    ["coachId"] = coachIdInt.ToString(),
-                    ["note"] = req.Note!
-                }
-            };
-
-            var service = new SessionService();
-            var session = await service.CreateAsync(options);
-
-            return Ok(new GiftCheckoutResponse { Url = session.Url, Message = "ok" });
+                    Message = $"Stripe error: {sx.StripeError?.Message ?? sx.Message}"
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new GiftCheckoutResponse
+                {
+                    Message = $"Server error creating checkout: {ex.Message}"
+                });
+            }
         }
 
         // =====================================================================
@@ -231,7 +305,7 @@ namespace PTfinder.API.Controllers
         public async Task<IActionResult> StripeWebhook()
         {
             var json = await new StreamReader(HttpContext.Request.Body).ReadToEndAsync();
-            var whSecret = _cfg["Stripe:WebhookSecret"];
+            var whSecret = _cfg["Stripe:WebhookSecret"] ?? _cfg["Stripe__WebhookSecret"];
             Event stripeEvent;
 
             try
