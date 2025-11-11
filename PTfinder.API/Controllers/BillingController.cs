@@ -73,7 +73,6 @@ namespace PTfinder.API.Controllers
 
                 if (!string.IsNullOrWhiteSpace(coach.StripeAccountId))
                     return Ok(new { accountId = coach.StripeAccountId });
-
                 var acctSvc = new AccountService();
                 var acct = await acctSvc.CreateAsync(new AccountCreateOptions
                 {
@@ -86,8 +85,9 @@ namespace PTfinder.API.Controllers
                         CardPayments = new AccountCapabilitiesCardPaymentsOptions { Requested = true },
                         Transfers = new AccountCapabilitiesTransfersOptions { Requested = true },
                     },
-                    BusinessType = "individual"
+           
                 });
+
 
                 var tracked = await _db.Coaches.FirstAsync(c => c.Id == coachIdInt);
                 tracked.StripeAccountId = acct.Id;
@@ -302,6 +302,18 @@ namespace PTfinder.API.Controllers
                 return StatusCode(500, new GiftCheckoutResponse { Message = $"Server error: {ex.Message}" });
             }
         }
+
+        [HttpGet("connect/ping")]
+        public ActionResult<object> ConnectPing()
+        {
+            var key = _cfg["Stripe:SecretKey"];
+            return Ok(new
+            {
+                stripeConfigured = !string.IsNullOrWhiteSpace(key),
+                frontendBase = (_cfg["Stripe:FrontendBase"] ?? "(null)")
+            });
+        }
+
 
         // =====================================================================
         // Webhook: store gifts (session completed) & handle refunds
