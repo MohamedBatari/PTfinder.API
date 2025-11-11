@@ -3,9 +3,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;            // ✅ for [AllowAnonymous]
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Primitives;               // ✅ for StringValues
 using PTfinder.API.DATA;
 using PTfinder.API.DATA.Modules;
 using Stripe;
@@ -25,7 +27,7 @@ namespace PTfinder.API.Controllers
             _db = db;
             _cfg = cfg;
 
-            // Prefer Program.cs for this; keep here as a fallback so local calls work.
+            // Prefer Program.cs; keep here as a fallback.
             if (string.IsNullOrWhiteSpace(StripeConfiguration.ApiKey))
                 StripeConfiguration.ApiKey = _cfg["Stripe:SecretKey"];
         }
@@ -72,18 +74,16 @@ namespace PTfinder.API.Controllers
                 if (coach == null)
                     return NotFound(new { message = "Coach not found" });
 
-                // If already has a Connect account, return it
                 if (!string.IsNullOrWhiteSpace(coach.StripeAccountId))
                     return Ok(new { accountId = coach.StripeAccountId });
 
-                // AE-compatible Express account: request ONLY transfers
+                // Request transfers capability (Express)
                 var acctSvc = new AccountService();
                 var acct = await acctSvc.CreateAsync(new AccountCreateOptions
                 {
                     Country = "AE",
                     Type = "express",
                     Email = string.IsNullOrWhiteSpace(coach.Email) ? null : coach.Email,
-                    // DefaultCurrency = "aed", // optional; onboarding fills this anyway
                     Capabilities = new AccountCapabilitiesOptions
                     {
                         Transfers = new AccountCapabilitiesTransfersOptions { Requested = true }
@@ -98,7 +98,6 @@ namespace PTfinder.API.Controllers
             }
             catch (StripeException se)
             {
-                // Friendly handling for the exact error you’re seeing
                 var msg = se.StripeError?.Message ?? se.Message;
                 var type = se.StripeError?.Type;
                 var param = se.StripeError?.Param;
@@ -110,7 +109,7 @@ namespace PTfinder.API.Controllers
                     return StatusCode(400, new
                     {
                         message = "Stripe Connect is not enabled on your platform in this mode.",
-                        hint = "Open Stripe Dashboard → (Test mode ON) → Settings → Connect → Enable Connect (Express). Then retry.",
+                        hint = "Stripe Dashboard → (Test mode ON) → Settings → Connect → Enable Connect (Express). Then retry.",
                         stripeError = new { type, code, param, msg }
                     });
                 }
@@ -256,7 +255,7 @@ namespace PTfinder.API.Controllers
                 var productName = $"Gift to {(string.IsNullOrWhiteSpace(req.CoachName) ? "Coach" : req.CoachName)} (#{coachIdInt})";
 
                 long amountMinor = (long)Math.Round(req.Amount * 100m);
-                long appFee = (long)Math.Round(amountMinor * 0.20m); // your 20% platform fee
+                long appFee = (long)Math.Round(amountMinor * 0.20m); // 20% platform fee
 
                 var options = new SessionCreateOptions
                 {
@@ -327,48 +326,56 @@ namespace PTfinder.API.Controllers
         // Webhook: record gifts (session completed) & handle refunds
         // =====================================================================
 
+        [AllowAnonymous]
         [HttpPost("webhook/stripe")]
         public async Task<IActionResult> StripeWebhook()
         {
             var json = await new StreamReader(HttpContext.Request.Body).ReadToEndAsync();
+
             var whSecret = _cfg["Stripe:WebhookSecret"];
             if (string.IsNullOrWhiteSpace(whSecret))
                 return BadRequest(new { message = "Webhook secret not configured" });
 
+            if (!Request.Headers.TryGetValue("Stripe-Signature", out StringValues sigVals) ||
+                StringValues.IsNullOrEmpty(sigVals))
+                return BadRequest(new { message = "Missing Stripe-Signature header" });
+
             Event stripeEvent;
             try
             {
-                stripeEvent = EventUtility.ConstructEvent(json, Request.Headers["Stripe-Signature"], whSecret);
+                stripeEvent = EventUtility.ConstructEvent(json, sigVals.ToString(), whSecret);
             }
-            catch (Exception ex)
+            catch (StripeException se)
             {
-                return BadRequest(new { message = "Webhook signature verification failed", error = ex.Message });
+                return BadRequest(new { message = "Signature verification failed", error = se.Message });
             }
+
+            // Use literal event names to avoid version issues
+            const string CHECKOUT_SESSION_COMPLETED = "checkout.session.completed";
+            const string CHARGE_REFUNDED = "charge.refunded";
 
             switch (stripeEvent.Type)
             {
-                case "checkout.session.completed":
+                case CHECKOUT_SESSION_COMPLETED:
                     {
                         var session = stripeEvent.Data.Object as Session;
-                        if (session != null)
+                        if (session != null && int.TryParse(session.Metadata?["coachId"], out var coachIdInt))
                         {
-                            var coachIdStr = session.Metadata?["coachId"];
-                            if (TryCoachId(coachIdStr, out var coachIdInt))
+                            var exists = await _db.CoachGifts
+                                .AsNoTracking()
+                                .AnyAsync(x => x.StripePaymentIntentId == session.PaymentIntentId);
+                            if (!exists)
                             {
-                                var note = session.Metadata?["note"];
-                                var amount = session.AmountTotal ?? 0;
-                                var donorEmail = session.CustomerDetails?.Email;
-
                                 _db.CoachGifts.Add(new CoachGift
                                 {
                                     CoachId = coachIdInt,
-                                    AmountMinor = amount,
-                                    Currency = (session.Currency ?? "aed").ToUpper(),
-                                    Note = string.IsNullOrWhiteSpace(note) ? null : note,
+                                    AmountMinor = session.AmountTotal ?? 0,
+                                    Currency = (session.Currency ?? "AED").ToUpperInvariant(),
+                                    Note = string.IsNullOrWhiteSpace(session.Metadata?["note"]) ? null : session.Metadata["note"],
                                     StripeSessionId = session.Id,
                                     StripePaymentIntentId = session.PaymentIntentId,
                                     Status = "succeeded",
-                                    DonorEmail = donorEmail,
+                                    DonorEmail = session.CustomerDetails?.Email,
                                     CreatedUtc = DateTime.UtcNow
                                 });
                                 await _db.SaveChangesAsync();
@@ -377,12 +384,12 @@ namespace PTfinder.API.Controllers
                         break;
                     }
 
-                case "charge.refunded":
+                case CHARGE_REFUNDED:
                     {
                         var charge = stripeEvent.Data.Object as Charge;
-                        if (charge != null)
+                        var pi = charge?.PaymentIntentId;
+                        if (!string.IsNullOrEmpty(pi))
                         {
-                            var pi = charge.PaymentIntentId;
                             var gift = await _db.CoachGifts.FirstOrDefaultAsync(g => g.StripePaymentIntentId == pi);
                             if (gift != null)
                             {
@@ -392,6 +399,7 @@ namespace PTfinder.API.Controllers
                         }
                         break;
                     }
+                    // other events: ignore
             }
 
             return Ok();
