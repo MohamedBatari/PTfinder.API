@@ -49,16 +49,27 @@ namespace PTfinder.API.Controllers
 
         public class ConnectAccountRequest { public string? CoachId { get; set; } }
 
+        // POST /api/Billing/connect/account
         [HttpPost("connect/account")]
         public async Task<ActionResult<object>> CreateOrFetchConnectAccount([FromBody] ConnectAccountRequest body)
         {
+            var cid = HttpContext.TraceIdentifier; // correlation id for logs
             try
             {
-                if (!TryCoachId(body?.CoachId, out var coachIdInt))
+                if (body == null)
+                    return BadRequest(new { message = "Body required: { coachId }" });
+
+                var coachIdStr = (body.CoachId ?? "").Trim();
+                if (!TryCoachId(coachIdStr, out var coachIdInt))
                     return BadRequest(new { message = "coachId must be an integer" });
 
-                var coach = await _db.Coaches.FirstOrDefaultAsync(c => c.Id == coachIdInt);
-                if (coach == null) return NotFound(new { message = "Coach not found" });
+                var key = _cfg["Stripe:SecretKey"];
+                if (string.IsNullOrWhiteSpace(key))
+                    return StatusCode(500, new { message = "Stripe not configured (SecretKey missing)" });
+
+                var coach = await _db.Coaches.AsNoTracking().FirstOrDefaultAsync(c => c.Id == coachIdInt);
+                if (coach == null)
+                    return NotFound(new { message = "Coach not found" });
 
                 if (!string.IsNullOrWhiteSpace(coach.StripeAccountId))
                     return Ok(new { accountId = coach.StripeAccountId });
@@ -78,7 +89,8 @@ namespace PTfinder.API.Controllers
                     BusinessType = "individual"
                 });
 
-                coach.StripeAccountId = acct.Id;
+                var tracked = await _db.Coaches.FirstAsync(c => c.Id == coachIdInt);
+                tracked.StripeAccountId = acct.Id;
                 await _db.SaveChangesAsync();
 
                 return Ok(new { accountId = acct.Id });
@@ -91,14 +103,15 @@ namespace PTfinder.API.Controllers
                     type = se.StripeError?.Type,
                     code = se.StripeError?.Code,
                     param = se.StripeError?.Param,
-                    error = se.StripeError?.Message ?? se.Message
+                    error = se.StripeError?.Message
                 });
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                return StatusCode(500, new { message = "Server error", error = ex.Message });
+                return StatusCode(502, new { message = "Server error creating Connect account", cid });
             }
         }
+
 
         [HttpPost("connect/account-link")]
         public async Task<ActionResult<object>> CreateAccountLink([FromBody] ConnectAccountRequest body)
