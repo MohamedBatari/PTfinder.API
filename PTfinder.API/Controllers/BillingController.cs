@@ -6,10 +6,10 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
-using Stripe;
-using Stripe.Checkout;
 using PTfinder.API.DATA;
 using PTfinder.API.DATA.Modules;
+using Stripe;
+using Stripe.Checkout;
 
 namespace PTfinder.API.Controllers
 {
@@ -24,7 +24,8 @@ namespace PTfinder.API.Controllers
         {
             _db = db;
             _cfg = cfg;
-            // Stripe key is already set in Program.cs; keep here as fallback
+
+            // Prefer Program.cs for this; keep here as a fallback so local calls work.
             if (string.IsNullOrWhiteSpace(StripeConfiguration.ApiKey))
                 StripeConfiguration.ApiKey = _cfg["Stripe:SecretKey"];
         }
@@ -35,7 +36,7 @@ namespace PTfinder.API.Controllers
         private static bool TryCoachId(string? s, out int id) =>
             int.TryParse((s ?? "").Trim(), out id);
 
-        // Quick probe to see if key is present (test only)
+        // ---------- Quick probe ----------
         [HttpGet("debug/stripe")]
         public ActionResult<object> StripeDebug()
         {
@@ -44,7 +45,7 @@ namespace PTfinder.API.Controllers
         }
 
         // =====================================================================
-        // Stripe Connect: create/fetch account for a coach
+        // Stripe Connect (AE): Express account with transfers only
         // =====================================================================
 
         public class ConnectAccountRequest { public string? CoachId { get; set; } }
@@ -53,14 +54,14 @@ namespace PTfinder.API.Controllers
         [HttpPost("connect/account")]
         public async Task<ActionResult<object>> CreateOrFetchConnectAccount([FromBody] ConnectAccountRequest body)
         {
-            var cid = HttpContext.TraceIdentifier; // correlation id for logs
+            var cid = HttpContext.TraceIdentifier;
+
             try
             {
                 if (body == null)
                     return BadRequest(new { message = "Body required: { coachId }" });
 
-                var coachIdStr = (body.CoachId ?? "").Trim();
-                if (!TryCoachId(coachIdStr, out var coachIdInt))
+                if (!TryCoachId(body.CoachId, out var coachIdInt))
                     return BadRequest(new { message = "coachId must be an integer" });
 
                 var key = _cfg["Stripe:SecretKey"];
@@ -71,23 +72,23 @@ namespace PTfinder.API.Controllers
                 if (coach == null)
                     return NotFound(new { message = "Coach not found" });
 
+                // If already has a Connect account, return it
                 if (!string.IsNullOrWhiteSpace(coach.StripeAccountId))
                     return Ok(new { accountId = coach.StripeAccountId });
+
+                // AE-compatible Express account: request ONLY transfers
                 var acctSvc = new AccountService();
                 var acct = await acctSvc.CreateAsync(new AccountCreateOptions
                 {
                     Country = "AE",
                     Type = "express",
                     Email = string.IsNullOrWhiteSpace(coach.Email) ? null : coach.Email,
-                    DefaultCurrency = "aed",
+                    // DefaultCurrency = "aed", // optional; onboarding fills this anyway
                     Capabilities = new AccountCapabilitiesOptions
                     {
-                        CardPayments = new AccountCapabilitiesCardPaymentsOptions { Requested = true },
-                        Transfers = new AccountCapabilitiesTransfersOptions { Requested = true },
-                    },
-           
+                        Transfers = new AccountCapabilitiesTransfersOptions { Requested = true }
+                    }
                 });
-
 
                 var tracked = await _db.Coaches.FirstAsync(c => c.Id == coachIdInt);
                 tracked.StripeAccountId = acct.Id;
@@ -97,22 +98,39 @@ namespace PTfinder.API.Controllers
             }
             catch (StripeException se)
             {
+                // Friendly handling for the exact error you’re seeing
+                var msg = se.StripeError?.Message ?? se.Message;
+                var type = se.StripeError?.Type;
+                var param = se.StripeError?.Param;
+                var code = se.StripeError?.Code;
+
+                if ((type == "invalid_request_error" || type == "api_error") &&
+                    msg?.Contains("signed up for Connect", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    return StatusCode(400, new
+                    {
+                        message = "Stripe Connect is not enabled on your platform in this mode.",
+                        hint = "Open Stripe Dashboard → (Test mode ON) → Settings → Connect → Enable Connect (Express). Then retry.",
+                        stripeError = new { type, code, param, msg }
+                    });
+                }
+
                 return StatusCode(502, new
                 {
                     message = "Stripe error creating Connect account",
-                    type = se.StripeError?.Type,
-                    code = se.StripeError?.Code,
-                    param = se.StripeError?.Param,
-                    error = se.StripeError?.Message
+                    type,
+                    code,
+                    param,
+                    error = msg
                 });
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                return StatusCode(502, new { message = "Server error creating Connect account", cid });
+                return StatusCode(502, new { message = "Server error creating Connect account", error = ex.Message, cid });
             }
         }
 
-
+        // POST /api/Billing/connect/account-link
         [HttpPost("connect/account-link")]
         public async Task<ActionResult<object>> CreateAccountLink([FromBody] ConnectAccountRequest body)
         {
@@ -133,6 +151,7 @@ namespace PTfinder.API.Controllers
                     RefreshUrl = $"{FrontendBase}/dashboard/gifts?stripe=refresh",
                     ReturnUrl = $"{FrontendBase}/dashboard/gifts?stripe=done"
                 });
+
                 return Ok(new { url = link.Url });
             }
             catch (StripeException se)
@@ -152,6 +171,7 @@ namespace PTfinder.API.Controllers
             }
         }
 
+        // GET /api/Billing/connect/status/{coachId}
         [HttpGet("connect/status/{coachId}")]
         public async Task<ActionResult<object>> ConnectStatus([FromRoute] string coachId)
         {
@@ -196,7 +216,7 @@ namespace PTfinder.API.Controllers
         }
 
         // =====================================================================
-        // Gifts Checkout (destination charges + platform fee)
+        // Gifts checkout: destination charges (platform fee + payout to coach)
         // =====================================================================
 
         [HttpPost("gift/checkout")]
@@ -207,7 +227,7 @@ namespace PTfinder.API.Controllers
             try
             {
                 if (req == null)
-                    return BadRequest(new GiftCheckoutResponse { Message = "Invalid JSON body. Send application/json with body { coachId, amount, note?, successUrl?, cancelUrl? }." });
+                    return BadRequest(new GiftCheckoutResponse { Message = "Invalid JSON body. Expected { coachId, amount, note?, successUrl?, cancelUrl? }" });
 
                 req.CoachId = (req.CoachId ?? string.Empty).Trim();
                 req.CoachName = (req.CoachName ?? string.Empty).Trim();
@@ -236,7 +256,7 @@ namespace PTfinder.API.Controllers
                 var productName = $"Gift to {(string.IsNullOrWhiteSpace(req.CoachName) ? "Coach" : req.CoachName)} (#{coachIdInt})";
 
                 long amountMinor = (long)Math.Round(req.Amount * 100m);
-                long appFee = (long)Math.Round(amountMinor * 0.20m); // 20% platform fee (change if needed)
+                long appFee = (long)Math.Round(amountMinor * 0.20m); // your 20% platform fee
 
                 var options = new SessionCreateOptions
                 {
@@ -303,20 +323,8 @@ namespace PTfinder.API.Controllers
             }
         }
 
-        [HttpGet("connect/ping")]
-        public ActionResult<object> ConnectPing()
-        {
-            var key = _cfg["Stripe:SecretKey"];
-            return Ok(new
-            {
-                stripeConfigured = !string.IsNullOrWhiteSpace(key),
-                frontendBase = (_cfg["Stripe:FrontendBase"] ?? "(null)")
-            });
-        }
-
-
         // =====================================================================
-        // Webhook: store gifts (session completed) & handle refunds
+        // Webhook: record gifts (session completed) & handle refunds
         // =====================================================================
 
         [HttpPost("webhook/stripe")]
@@ -324,6 +332,8 @@ namespace PTfinder.API.Controllers
         {
             var json = await new StreamReader(HttpContext.Request.Body).ReadToEndAsync();
             var whSecret = _cfg["Stripe:WebhookSecret"];
+            if (string.IsNullOrWhiteSpace(whSecret))
+                return BadRequest(new { message = "Webhook secret not configured" });
 
             Event stripeEvent;
             try
@@ -388,4 +398,3 @@ namespace PTfinder.API.Controllers
         }
     }
 }
-
