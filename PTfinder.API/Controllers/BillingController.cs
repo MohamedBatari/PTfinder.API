@@ -404,5 +404,16 @@ namespace PTfinder.API.Controllers
 
             return Ok();
         }
+        [HttpGet("debug/webhook-config")]
+        public ActionResult<object> WebhookConfigDebug()
+        {
+            var secret = _cfg["Stripe:WebhookSecret"];
+            return Ok(new
+            {
+                hasSecret = !string.IsNullOrWhiteSpace(secret),
+                secretPreview = secret?.StartsWith("whsec_") == true ? "whsec_***" : secret,
+                route = "/api/Billing/webhook/stripe"
+            });
+        }
     }
 }
