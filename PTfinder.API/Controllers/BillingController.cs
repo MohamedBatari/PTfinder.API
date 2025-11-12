@@ -132,48 +132,27 @@ namespace PTfinder.API.Controllers
         }
 
         // POST /api/Billing/connect/account-link
-        [HttpPost("connect/account-link")]
-        public async Task<ActionResult<object>> CreateAccountLink([FromBody] ConnectAccountRequest body)
-        {
-            try
-            {
-                if (!TryCoachId(body?.CoachId, out var coachIdInt))
-                    return BadRequest(new { message = "coachId must be an integer" });
 
-                var coach = await _db.Coaches.FirstOrDefaultAsync(c => c.Id == coachIdInt);
-                if (coach == null || string.IsNullOrWhiteSpace(coach.StripeAccountId))
-                    return BadRequest(new { message = "Coach missing Stripe account. Call /connect/account first." });
+[HttpPost("connect/login-link")]
+    public async Task<IActionResult> CreateLoginLink([FromBody] ConnectAccountRequest body)
+    {
+        if (!TryCoachId(body?.CoachId, out var coachIdInt))
+            return BadRequest(new { message = "coachId must be an integer" });
 
-                var linkSvc = new AccountLinkService();
-                var link = await linkSvc.CreateAsync(new AccountLinkCreateOptions
-                {
-                    Account = coach.StripeAccountId,
-                    Type = "account_onboarding",
-                    RefreshUrl = $"{FrontendBase}/dashboard/gifts?stripe=refresh",
-                    ReturnUrl = $"{FrontendBase}/dashboard/gifts?stripe=done"
-                });
+        var coach = await _db.Coaches.FirstOrDefaultAsync(c => c.Id == coachIdInt);
+        if (coach == null) return NotFound(new { message = "Coach not found" });
+        if (string.IsNullOrWhiteSpace(coach.StripeAccountId))
+            return BadRequest(new { message = "Coach is not connected to Stripe yet." });
 
-                return Ok(new { url = link.Url });
-            }
-            catch (StripeException se)
-            {
-                return StatusCode(502, new
-                {
-                    message = "Stripe error creating AccountLink",
-                    type = se.StripeError?.Type,
-                    code = se.StripeError?.Code,
-                    param = se.StripeError?.Param,
-                    error = se.StripeError?.Message ?? se.Message
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "Server error", error = ex.Message });
-            }
-        }
+        var loginSvc = new LoginLinkService();           // ✅ NOT Stripe.AccountLinks.*
+        var link = await loginSvc.CreateAsync(coach.StripeAccountId);
+        return Ok(new { url = link.Url });
+    }
 
-        // GET /api/Billing/connect/status/{coachId}
-        [HttpGet("connect/status/{coachId}")]
+
+
+    // GET /api/Billing/connect/status/{coachId}
+    [HttpGet("connect/status/{coachId}")]
         public async Task<ActionResult<object>> ConnectStatus([FromRoute] string coachId)
         {
             try
