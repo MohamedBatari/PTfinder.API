@@ -132,24 +132,69 @@ namespace PTfinder.API.Controllers
         }
 
         // POST /api/Billing/connect/account-link
+        [HttpPost("connect/account-link")]
+        public async Task<IActionResult> CreateAccountLink([FromBody] ConnectAccountRequest body)
+        {
+            if (!TryCoachId(body?.CoachId, out var coachIdInt))
+                return BadRequest(new { message = "coachId must be an integer" });
 
-[HttpPost("connect/login-link")]
-    public async Task<IActionResult> CreateLoginLink([FromBody] ConnectAccountRequest body)
-    {
-        if (!TryCoachId(body?.CoachId, out var coachIdInt))
-            return BadRequest(new { message = "coachId must be an integer" });
+            var key = _cfg["Stripe:SecretKey"];
+            if (string.IsNullOrWhiteSpace(key))
+                return StatusCode(500, new { message = "Stripe not configured (SecretKey missing)" });
 
-        var coach = await _db.Coaches.FirstOrDefaultAsync(c => c.Id == coachIdInt);
-        if (coach == null) return NotFound(new { message = "Coach not found" });
-        if (string.IsNullOrWhiteSpace(coach.StripeAccountId))
-            return BadRequest(new { message = "Coach is not connected to Stripe yet." });
+            var coach = await _db.Coaches.FirstOrDefaultAsync(c => c.Id == coachIdInt);
+            if (coach == null) return NotFound(new { message = "Coach not found" });
 
-        var loginSvc = new LoginLinkService();           // ✅ NOT Stripe.AccountLinks.*
-        var link = await loginSvc.CreateAsync(coach.StripeAccountId);
-        return Ok(new { url = link.Url });
-    }
+            // Ensure the coach has a Stripe Connect account
+            var accountId = coach.StripeAccountId;
+            if (string.IsNullOrWhiteSpace(accountId))
+            {
+                var acctSvc = new AccountService();
+                var acct = await acctSvc.CreateAsync(new AccountCreateOptions
+                {
+                    Country = "AE",
+                    Type = "express",
+                    Email = string.IsNullOrWhiteSpace(coach.Email) ? null : coach.Email,
+                    Capabilities = new AccountCapabilitiesOptions
+                    {
+                        Transfers = new AccountCapabilitiesTransfersOptions { Requested = true }
+                    }
+                });
+                coach.StripeAccountId = acct.Id;
+                await _db.SaveChangesAsync();
+                accountId = acct.Id;
+            }
 
+            // Create onboarding link
+            var appBase = FrontendBase; // your web app base
+            var links = new AccountLinkService();
+            var link = await links.CreateAsync(new AccountLinkCreateOptions
+            {
+                Account = accountId!,
+                Type = "account_onboarding",
+                RefreshUrl = $"{appBase}/onboarding/refresh",
+                ReturnUrl = $"{appBase}/onboarding/return"
+            });
 
+            return Ok(new { url = link.Url });
+        }
+
+        // POST /api/Billing/connect/login-link
+        [HttpPost("connect/login-link")]
+        public async Task<IActionResult> CreateLoginLink([FromBody] ConnectAccountRequest body)
+        {
+            if (!TryCoachId(body?.CoachId, out var coachIdInt))
+                return BadRequest(new { message = "coachId must be an integer" });
+
+            var coach = await _db.Coaches.FirstOrDefaultAsync(c => c.Id == coachIdInt);
+            if (coach == null) return NotFound(new { message = "Coach not found" });
+            if (string.IsNullOrWhiteSpace(coach.StripeAccountId))
+                return BadRequest(new { message = "Coach is not connected to Stripe yet." });
+
+            var loginSvc = new LoginLinkService();           // ✅ NOT Stripe.AccountLinks.*
+            var link = await loginSvc.CreateAsync(coach.StripeAccountId);
+            return Ok(new { url = link.Url });
+        }
 
         // GET /api/Billing/connect/status/{coachId}
         [HttpGet("connect/status/{coachId}")]
@@ -172,7 +217,7 @@ namespace PTfinder.API.Controllers
                 var req = acct.Requirements;
                 var disabledReason = (req?.DisabledReason ?? string.Empty).ToLowerInvariant();
 
-                // When *both* payouts and charges are enabled and there are no due items,
+                // When both payouts and charges are enabled and there are no due items,
                 // it's safe to open the Express dashboard via LoginLink.
                 var hasDue = (req?.CurrentlyDue?.Any() ?? false) || (req?.PastDue?.Any() ?? false);
                 var canLoginLink = acct.PayoutsEnabled && acct.ChargesEnabled && !hasDue &&
@@ -212,7 +257,6 @@ namespace PTfinder.API.Controllers
                 return StatusCode(500, new { message = "Server error", error = ex.Message });
             }
         }
-
 
         // =====================================================================
         // Gifts checkout: destination charges (platform fee + payout to coach)
@@ -427,15 +471,14 @@ namespace PTfinder.API.Controllers
 <p>Your payout (80%) is <b>AED {net:0.00}</b>. The remaining 20% is the platform fee.</p>
 {(string.IsNullOrWhiteSpace(note) ? "" : $"<p><i>Message from sender:</i> {System.Net.WebUtility.HtmlEncode(note)}</p>")}
 <p>You can track payouts in your dashboard: <a href=""{FrontendBase}/dashboard/gifts"">Gifts Dashboard</a>.</p>
-<p>— PTfinderNow</p>";
+<p>- PTfinderNow</p>";
 
-                                    var bodyText =
-$@"Hi {coach.FullName ?? "Coach"},
+                                    var bodyText = $@"Hi {coach.FullName ?? "Coach"},
 You received a gift of AED {gross:0.00}{(string.IsNullOrWhiteSpace(donor) ? "" : $" from {donor}")}.
 Your payout (80%) is AED {net:0.00}. The remaining 20% is the platform fee.
 {(string.IsNullOrWhiteSpace(note) ? "" : $"Message: {note}")}
 Dashboard: {FrontendBase}/dashboard/gifts
-— PTfinderNow";
+- PTfinderNow";
 
                                     await _email.SendAsync(
                                         to: coach.Email,
@@ -486,4 +529,3 @@ Dashboard: {FrontendBase}/dashboard/gifts
         }
     }
 }
-
