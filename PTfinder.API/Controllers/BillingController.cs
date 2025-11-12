@@ -3,13 +3,13 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Authorization;            // ✅ for [AllowAnonymous]
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Primitives;               // ✅ for StringValues
 using PTfinder.API.DATA;
 using PTfinder.API.DATA.Modules;
+using PTfinder.API.Services;                  // ✅ your SMTP sender
 using Stripe;
 using Stripe.Checkout;
 
@@ -21,11 +21,13 @@ namespace PTfinder.API.Controllers
     {
         private readonly AppDbContext _db;
         private readonly IConfiguration _cfg;
+        private readonly IEmailSender _email;  // ✅ inject email sender
 
-        public BillingController(AppDbContext db, IConfiguration cfg)
+        public BillingController(AppDbContext db, IConfiguration cfg, IEmailSender email)
         {
             _db = db;
             _cfg = cfg;
+            _email = email;
 
             // Prefer Program.cs; keep here as a fallback.
             if (string.IsNullOrWhiteSpace(StripeConfiguration.ApiKey))
@@ -323,9 +325,8 @@ namespace PTfinder.API.Controllers
         }
 
         // =====================================================================
-        // Webhook: record gifts (session completed) & handle refunds
+        // Webhook: record gifts (session completed) & send email to coach
         // =====================================================================
-
 
         [AllowAnonymous]
         [HttpPost("webhook/stripe")]
@@ -342,7 +343,7 @@ namespace PTfinder.API.Controllers
             Event evt;
             try
             {
-                // 👇 key change: throwOnApiVersionMismatch = false
+                // tolerate API version drift
                 evt = EventUtility.ConstructEvent(
                     json,
                     sig.ToString(),
@@ -357,56 +358,105 @@ namespace PTfinder.API.Controllers
                 return BadRequest(new { message = "Signature verification failed", error = se.Message });
             }
 
-            Console.WriteLine("WEBHOOK OK type=" + evt.Type);
-
-            // ---- handle checkout.session.completed (and pick coachId from PI if needed)
+            // --- Handle checkout.session.completed
             if (evt.Type == "checkout.session.completed")
             {
                 var session = evt.Data.Object as Session;
                 if (session != null)
                 {
-                    // Try coachId from Session metadata
+                    // Read coachId from Session or PI metadata
                     string? coachIdStr = session.Metadata?.TryGetValue("coachId", out var v1) == true ? v1 : null;
+                    PaymentIntent? pi = null;
 
-                    // Fallback to PaymentIntent metadata (dashboard “send test event” often lacks metadata)
                     if (string.IsNullOrWhiteSpace(coachIdStr) && !string.IsNullOrWhiteSpace(session.PaymentIntentId))
                     {
-                        try
-                        {
-                            var pi = await new PaymentIntentService().GetAsync(session.PaymentIntentId);
-                            if (pi?.Metadata?.TryGetValue("coachId", out var v2) == true) coachIdStr = v2;
-                        }
+                        try { pi = await new PaymentIntentService().GetAsync(session.PaymentIntentId); }
+                        catch { /* ignore */ }
+                        if (pi?.Metadata?.TryGetValue("coachId", out var v2) == true) coachIdStr = v2;
+                    }
+                    else if (!string.IsNullOrWhiteSpace(session.PaymentIntentId))
+                    {
+                        try { pi = await new PaymentIntentService().GetAsync(session.PaymentIntentId); }
                         catch { /* ignore */ }
                     }
 
                     if (int.TryParse(coachIdStr, out var coachIdInt))
                     {
-                        // idempotency
                         var already = await _db.CoachGifts.AsNoTracking()
                             .AnyAsync(x => x.StripePaymentIntentId == session.PaymentIntentId);
                         if (!already)
                         {
+                            var amountMinor = session.AmountTotal ?? 0;
+                            var currency = (session.Currency ?? "AED").ToUpperInvariant();
+                            var note = (session.Metadata?.TryGetValue("note", out var n) == true && !string.IsNullOrWhiteSpace(n)) ? n : null;
+                            var donor = session.CustomerDetails?.Email;
+
                             _db.CoachGifts.Add(new CoachGift
                             {
                                 CoachId = coachIdInt,
-                                AmountMinor = session.AmountTotal ?? 0,
-                                Currency = (session.Currency ?? "AED").ToUpperInvariant(),
-                                Note = (session.Metadata?.TryGetValue("note", out var n) == true && !string.IsNullOrWhiteSpace(n)) ? n : null,
+                                AmountMinor = amountMinor,
+                                Currency = currency,
+                                Note = note,
                                 StripeSessionId = session.Id,
                                 StripePaymentIntentId = session.PaymentIntentId,
                                 Status = "succeeded",
-                                DonorEmail = session.CustomerDetails?.Email,
+                                DonorEmail = donor,
                                 CreatedUtc = DateTime.UtcNow
                             });
                             await _db.SaveChangesAsync();
+
+                            // --- Send email to coach (80% net)
+                            try
+                            {
+                                var coach = await _db.Coaches.AsNoTracking().FirstOrDefaultAsync(c => c.Id == coachIdInt);
+                                if (coach != null && !string.IsNullOrWhiteSpace(coach.Email))
+                                {
+                                    // Compute app fee & net (prefer PI.ApplicationFeeAmount if present)
+                                    long feeMinor = 0;
+                                    if (pi != null && pi.ApplicationFeeAmount.HasValue)
+                                        feeMinor = pi.ApplicationFeeAmount.Value;
+                                    else
+                                        feeMinor = (long)Math.Round(amountMinor * 0.20m); // fallback
+
+                                    var netMinor = Math.Max(0, amountMinor - feeMinor);
+                                    var gross = amountMinor / 100m;
+                                    var net = netMinor / 100m;
+
+                                    var subject = "🎁 You just received a gift on PTfinderNow";
+                                    var bodyHtml = $@"
+<p>Hi <b>{coach.FullName ?? "Coach"}</b>,</p>
+<p>You just received a gift of <b>AED {gross:0.00}</b>{(string.IsNullOrWhiteSpace(donor) ? "" : $" from <b>{donor}</b>")}.</p>
+<p>Your payout (80%) is <b>AED {net:0.00}</b>. The remaining 20% is the platform fee.</p>
+{(string.IsNullOrWhiteSpace(note) ? "" : $"<p><i>Message from sender:</i> {System.Net.WebUtility.HtmlEncode(note)}</p>")}
+<p>You can track payouts in your dashboard: <a href=""{FrontendBase}/dashboard/gifts"">Gifts Dashboard</a>.</p>
+<p>— PTfinderNow</p>";
+
+                                    var bodyText =
+$@"Hi {coach.FullName ?? "Coach"},
+You received a gift of AED {gross:0.00}{(string.IsNullOrWhiteSpace(donor) ? "" : $" from {donor}")}.
+Your payout (80%) is AED {net:0.00}. The remaining 20% is the platform fee.
+{(string.IsNullOrWhiteSpace(note) ? "" : $"Message: {note}")}
+Dashboard: {FrontendBase}/dashboard/gifts
+— PTfinderNow";
+
+                                    await _email.SendAsync(
+                                        to: coach.Email,
+                                        subject: subject,
+                                        htmlBody: bodyHtml,
+                                        textBody: bodyText,
+                                        tags: new[] { ("Event", "GiftReceived") }
+                                    );
+                                }
+                            }
+                            catch (Exception mailEx)
+                            {
+                                Console.WriteLine("Email send error: " + mailEx.Message);
+                            }
                         }
-                    }
-                    else
-                    {
-                        Console.WriteLine("WEBHOOK: missing coachId → ignoring (likely a dashboard test event).");
                     }
                 }
             }
+            // --- Handle refunds
             else if (evt.Type == "charge.refunded")
             {
                 var charge = evt.Data.Object as Charge;
@@ -438,3 +488,4 @@ namespace PTfinder.API.Controllers
         }
     }
 }
+

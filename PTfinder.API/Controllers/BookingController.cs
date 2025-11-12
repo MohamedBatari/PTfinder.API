@@ -76,7 +76,7 @@ namespace PTfinder.API.Controllers
             // Transactional emails (simple text)
             // ─────────────────────────────────────────────────────
             var when = $"{booking.BookingDate:yyyy-MM-dd HH:mm}";
-            var manageUrl = $"{WebBaseUrl}/dashboard/bookings/bookings/{booking.Id}";
+            var manageUrl = $"{WebBaseUrl}/dashboard/bookings/{booking.Id}";
 
             // Email → Coach
             await _sender.SendAsync(
@@ -165,7 +165,7 @@ We'll email you when the coach confirms or proposes a new time.
             var serviceName = "Personal training session";     // tweak if you store service name
             var timezone = "Asia/Dubai";                       // tweak if you store user tz
             var when = $"{booking.BookingDate:yyyy-MM-dd HH:mm}";
-            var manageUrl = $"{WebBaseUrl}/dashboard/bookings/bookings/{booking.Id}";
+            var manageUrl = $"{WebBaseUrl}/dashboard/bookings/{booking.Id}";
 
             // Email → Student; Notification → Coach
             if (statusDto.Status == BookingStatus.Accepted)
