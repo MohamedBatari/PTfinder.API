@@ -326,84 +326,105 @@ namespace PTfinder.API.Controllers
         // Webhook: record gifts (session completed) & handle refunds
         // =====================================================================
 
+
         [AllowAnonymous]
         [HttpPost("webhook/stripe")]
         public async Task<IActionResult> StripeWebhook()
         {
             var json = await new StreamReader(HttpContext.Request.Body).ReadToEndAsync();
-
             var whSecret = _cfg["Stripe:WebhookSecret"];
             if (string.IsNullOrWhiteSpace(whSecret))
                 return BadRequest(new { message = "Webhook secret not configured" });
 
-            if (!Request.Headers.TryGetValue("Stripe-Signature", out StringValues sigVals) ||
-                StringValues.IsNullOrEmpty(sigVals))
+            if (!Request.Headers.TryGetValue("Stripe-Signature", out var sig) || string.IsNullOrWhiteSpace(sig))
                 return BadRequest(new { message = "Missing Stripe-Signature header" });
 
-            Event stripeEvent;
+            Event evt;
             try
             {
-                stripeEvent = EventUtility.ConstructEvent(json, sigVals.ToString(), whSecret);
+                // 👇 key change: throwOnApiVersionMismatch = false
+                evt = EventUtility.ConstructEvent(
+                    json,
+                    sig.ToString(),
+                    whSecret,
+                    tolerance: 300,
+                    throwOnApiVersionMismatch: false
+                );
             }
             catch (StripeException se)
             {
+                Console.WriteLine("WEBHOOK signature fail: " + se.Message);
                 return BadRequest(new { message = "Signature verification failed", error = se.Message });
             }
 
-            // Use literal event names to avoid version issues
-            const string CHECKOUT_SESSION_COMPLETED = "checkout.session.completed";
-            const string CHARGE_REFUNDED = "charge.refunded";
+            Console.WriteLine("WEBHOOK OK type=" + evt.Type);
 
-            switch (stripeEvent.Type)
+            // ---- handle checkout.session.completed (and pick coachId from PI if needed)
+            if (evt.Type == "checkout.session.completed")
             {
-                case CHECKOUT_SESSION_COMPLETED:
+                var session = evt.Data.Object as Session;
+                if (session != null)
+                {
+                    // Try coachId from Session metadata
+                    string? coachIdStr = session.Metadata?.TryGetValue("coachId", out var v1) == true ? v1 : null;
+
+                    // Fallback to PaymentIntent metadata (dashboard “send test event” often lacks metadata)
+                    if (string.IsNullOrWhiteSpace(coachIdStr) && !string.IsNullOrWhiteSpace(session.PaymentIntentId))
                     {
-                        var session = stripeEvent.Data.Object as Session;
-                        if (session != null && int.TryParse(session.Metadata?["coachId"], out var coachIdInt))
+                        try
                         {
-                            var exists = await _db.CoachGifts
-                                .AsNoTracking()
-                                .AnyAsync(x => x.StripePaymentIntentId == session.PaymentIntentId);
-                            if (!exists)
-                            {
-                                _db.CoachGifts.Add(new CoachGift
-                                {
-                                    CoachId = coachIdInt,
-                                    AmountMinor = session.AmountTotal ?? 0,
-                                    Currency = (session.Currency ?? "AED").ToUpperInvariant(),
-                                    Note = string.IsNullOrWhiteSpace(session.Metadata?["note"]) ? null : session.Metadata["note"],
-                                    StripeSessionId = session.Id,
-                                    StripePaymentIntentId = session.PaymentIntentId,
-                                    Status = "succeeded",
-                                    DonorEmail = session.CustomerDetails?.Email,
-                                    CreatedUtc = DateTime.UtcNow
-                                });
-                                await _db.SaveChangesAsync();
-                            }
+                            var pi = await new PaymentIntentService().GetAsync(session.PaymentIntentId);
+                            if (pi?.Metadata?.TryGetValue("coachId", out var v2) == true) coachIdStr = v2;
                         }
-                        break;
+                        catch { /* ignore */ }
                     }
 
-                case CHARGE_REFUNDED:
+                    if (int.TryParse(coachIdStr, out var coachIdInt))
                     {
-                        var charge = stripeEvent.Data.Object as Charge;
-                        var pi = charge?.PaymentIntentId;
-                        if (!string.IsNullOrEmpty(pi))
+                        // idempotency
+                        var already = await _db.CoachGifts.AsNoTracking()
+                            .AnyAsync(x => x.StripePaymentIntentId == session.PaymentIntentId);
+                        if (!already)
                         {
-                            var gift = await _db.CoachGifts.FirstOrDefaultAsync(g => g.StripePaymentIntentId == pi);
-                            if (gift != null)
+                            _db.CoachGifts.Add(new CoachGift
                             {
-                                gift.Status = "refunded";
-                                await _db.SaveChangesAsync();
-                            }
+                                CoachId = coachIdInt,
+                                AmountMinor = session.AmountTotal ?? 0,
+                                Currency = (session.Currency ?? "AED").ToUpperInvariant(),
+                                Note = (session.Metadata?.TryGetValue("note", out var n) == true && !string.IsNullOrWhiteSpace(n)) ? n : null,
+                                StripeSessionId = session.Id,
+                                StripePaymentIntentId = session.PaymentIntentId,
+                                Status = "succeeded",
+                                DonorEmail = session.CustomerDetails?.Email,
+                                CreatedUtc = DateTime.UtcNow
+                            });
+                            await _db.SaveChangesAsync();
                         }
-                        break;
                     }
-                    // other events: ignore
+                    else
+                    {
+                        Console.WriteLine("WEBHOOK: missing coachId → ignoring (likely a dashboard test event).");
+                    }
+                }
+            }
+            else if (evt.Type == "charge.refunded")
+            {
+                var charge = evt.Data.Object as Charge;
+                var pi = charge?.PaymentIntentId;
+                if (!string.IsNullOrWhiteSpace(pi))
+                {
+                    var gift = await _db.CoachGifts.FirstOrDefaultAsync(g => g.StripePaymentIntentId == pi);
+                    if (gift != null)
+                    {
+                        gift.Status = "refunded";
+                        await _db.SaveChangesAsync();
+                    }
+                }
             }
 
             return Ok();
         }
+
         [HttpGet("debug/webhook-config")]
         public ActionResult<object> WebhookConfigDebug()
         {
