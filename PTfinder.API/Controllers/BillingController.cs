@@ -151,8 +151,8 @@ namespace PTfinder.API.Controllers
 
 
 
-    // GET /api/Billing/connect/status/{coachId}
-    [HttpGet("connect/status/{coachId}")]
+        // GET /api/Billing/connect/status/{coachId}
+        [HttpGet("connect/status/{coachId}")]
         public async Task<ActionResult<object>> ConnectStatus([FromRoute] string coachId)
         {
             try
@@ -169,14 +169,31 @@ namespace PTfinder.API.Controllers
                 var svc = new AccountService();
                 var acct = await svc.GetAsync(coach.StripeAccountId);
 
+                var req = acct.Requirements;
+                var disabledReason = (req?.DisabledReason ?? string.Empty).ToLowerInvariant();
+
+                // When *both* payouts and charges are enabled and there are no due items,
+                // it's safe to open the Express dashboard via LoginLink.
+                var hasDue = (req?.CurrentlyDue?.Any() ?? false) || (req?.PastDue?.Any() ?? false);
+                var canLoginLink = acct.PayoutsEnabled && acct.ChargesEnabled && !hasDue &&
+                                   disabledReason is "" or "other"; // Stripe may use empty/“other” when fully active
+
                 return Ok(new
                 {
                     connected = true,
                     accountId = acct.Id,
                     chargesEnabled = acct.ChargesEnabled,
                     payoutsEnabled = acct.PayoutsEnabled,
-                    disabledReason = acct.Requirements?.DisabledReason,          
-                    requirements = acct.Requirements?.CurrentlyDue
+
+                    // details that help your UI choose the right CTA:
+                    disabledReason,
+                    requirements = req?.CurrentlyDue ?? new List<string>(),
+                    pastDue = req?.PastDue ?? new List<string>(),
+                    eventuallyDue = req?.EventuallyDue ?? new List<string>(),
+                    pendingVerification = req?.PendingVerification ?? new List<string>(),
+
+                    // convenience flag for front-end
+                    canLoginLink
                 });
             }
             catch (StripeException se)
@@ -195,6 +212,7 @@ namespace PTfinder.API.Controllers
                 return StatusCode(500, new { message = "Server error", error = ex.Message });
             }
         }
+
 
         // =====================================================================
         // Gifts checkout: destination charges (platform fee + payout to coach)
