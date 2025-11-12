@@ -175,6 +175,7 @@ namespace PTfinder.API.Controllers
                     accountId = acct.Id,
                     chargesEnabled = acct.ChargesEnabled,
                     payoutsEnabled = acct.PayoutsEnabled,
+                    disabledReason = acct.Requirements?.DisabledReason,          
                     requirements = acct.Requirements?.CurrentlyDue
                 });
             }
