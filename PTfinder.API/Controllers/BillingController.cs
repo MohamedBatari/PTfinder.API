@@ -541,6 +541,7 @@ namespace PTfinder.API.Controllers
                 var subSvc = new Stripe.SubscriptionService();
                 var sub = await subSvc.GetAsync(subscriptionId);
 
+                // 1) Your existing logic: update internal subscription state
                 await _coachSubscriptions.HandleCheckoutCompletedAsync(
                     coachIdString,
                     plan,
@@ -548,6 +549,100 @@ namespace PTfinder.API.Controllers
                     subscriptionId,
                     sub.CurrentPeriodEnd
                 );
+
+                // 2) New: send email to coach with subscription + invoice info
+                if (int.TryParse(coachIdString, out var coachIdInt))
+                {
+                    var coach = await _db.Coaches.AsNoTracking()
+                        .FirstOrDefaultAsync(c => c.Id == coachIdInt);
+
+                    if (coach != null && !string.IsNullOrWhiteSpace(coach.Email))
+                    {
+                        Invoice? invoice = null;
+                        try
+                        {
+                            var latestInvoiceId = sub.LatestInvoiceId;
+                            if (!string.IsNullOrWhiteSpace(latestInvoiceId))
+                            {
+                                var invSvc = new InvoiceService();
+                                invoice = await invSvc.GetAsync(latestInvoiceId);
+                            }
+                        }
+                        catch
+                        {
+                            // ignore invoice fetch errors
+                        }
+
+                        var firstItem = sub.Items?.Data?.FirstOrDefault();
+                        var price = firstItem?.Price;
+                        var currency = (invoice?.Currency ?? price?.Currency ?? "aed").ToUpperInvariant();
+                        long unitAmountMinor = price?.UnitAmount ?? 0;
+                        var amount = unitAmountMinor / 100m;
+
+                        var interval = price?.Recurring?.Interval ?? "month";
+                        var intervalCount = price?.Recurring?.IntervalCount ?? 1;
+
+                        // Stripe .NET gives DateTime (or DateTime?) – no Unix conversion needed
+                        var currentPeriodStart = sub.CurrentPeriodStart;
+                        var currentPeriodEnd = sub.CurrentPeriodEnd;
+
+                        DateTime? trialEnd = sub.TrialEnd;
+
+                        var planLabel = plan.Equals("pro", StringComparison.OrdinalIgnoreCase) ? "Pro" : "Basic";
+                        var billingPeriodLabel = intervalCount == 1
+                            ? interval
+                            : $"{intervalCount} {interval}";
+
+                        var hostedInvoiceUrl = invoice?.HostedInvoiceUrl;
+                        var invoicePdf = invoice?.InvoicePdf;
+
+                        var subject = "✅ Your PTfinderNow subscription is active";
+
+                        var bodyHtml = $@"
+<p>Hi <b>{coach.FullName ?? ""} </b>,</p>
+<p>Your PTfinderNow subscription is now <b>active</b>.</p>
+<ul>
+  <li><b>Plan:</b> {planLabel}</li>
+  <li><b>Billing:</b> every {billingPeriodLabel}</li>
+  <li><b>Amount:</b> {currency} {amount:0.00}</li>
+  <li><b>Current period:</b> {currentPeriodStart:yyyy-MM-dd} → {currentPeriodEnd:yyyy-MM-dd}</li>
+  {(trialEnd.HasValue ? $"<li><b>Trial ends:</b> {trialEnd.Value:yyyy-MM-dd}</li>" : "")}
+</ul>
+{(string.IsNullOrWhiteSpace(hostedInvoiceUrl) ? "" : $"<p><b>Invoice (online):</b> <a href=\"{hostedInvoiceUrl}\">{hostedInvoiceUrl}</a></p>")}
+{(string.IsNullOrWhiteSpace(invoicePdf) ? "" : $"<p><b>Invoice PDF:</b> <a href=\"{invoicePdf}\">{invoicePdf}</a></p>")}
+<p>You can manage your subscription anytime here: <a href=""{FrontendBase}/coach/subscription"">Subscription Dashboard</a>.</p>
+<p>- PTfinderNow</p>";
+
+                        var bodyText =
+$@"Hi {coach.FullName ?? "Coach"},
+
+Your PTfinderNow subscription is now active.
+
+Plan: {planLabel}
+Billing: every {billingPeriodLabel}
+Amount: {currency} {amount:0.00}
+Current period: {currentPeriodStart:yyyy-MM-dd} → {currentPeriodEnd:yyyy-MM-dd}" +
+(trialEnd.HasValue ? $"\nTrial ends: {trialEnd.Value:yyyy-MM-dd}" : "") +
+(string.IsNullOrWhiteSpace(hostedInvoiceUrl) ? "" : $"\nInvoice (online): {hostedInvoiceUrl}") +
+(string.IsNullOrWhiteSpace(invoicePdf) ? "" : $"\nInvoice PDF: {invoicePdf}") +
+$"\n\nManage your subscription: {FrontendBase}/coach/subscription\n- PTfinderNow";
+
+                        try
+                        {
+                            await _email.SendAsync(
+                                to: coach.Email,
+                                subject: subject,
+                                htmlBody: bodyHtml,
+                                textBody: bodyText,
+                                tags: new[] { ("Event", "SubscriptionStarted") }
+                            );
+                        }
+                        catch (Exception mailEx)
+                        {
+                            Console.WriteLine("Subscription email send error: " + mailEx.Message);
+                        }
+                    }
+                }
             }
         }
 
@@ -653,4 +748,3 @@ Dashboard: {FrontendBase}/dashboard/gifts
         }
     }
 }
-
