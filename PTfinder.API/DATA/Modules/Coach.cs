@@ -1,5 +1,4 @@
-﻿using Stripe;
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace PTfinder.API.DATA.Modules
@@ -59,7 +58,6 @@ namespace PTfinder.API.DATA.Modules
         public List<Availability> Availabilities { get; set; }
         public List<Booking> Bookings { get; set; }
         public ICollection<Review> Reviews { get; set; }
-        public ICollection<Subscription> Subscriptions { get; set; } // if you already have it
         public ICollection<GalleryMedia> GalleryMedia { get; set; }
 
         // ===== NEW: Company (Partner) linkage =====

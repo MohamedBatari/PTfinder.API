@@ -47,10 +47,6 @@ namespace PTfinder.API.Controllers
             var chosen = string.IsNullOrWhiteSpace(preferredFrom) ? _smtp?.FromAddresses?.Default : preferredFrom;
             return string.IsNullOrWhiteSpace(chosen) ? null : chosen;
         }
-
-        // ─────────────────────────────────────────────────────────────────────────
-        // GET: api/coaches
-        // ─────────────────────────────────────────────────────────────────────────
         [HttpGet]
         public async Task<ActionResult<IEnumerable<object>>> GetCoaches()
         {
@@ -63,6 +59,7 @@ namespace PTfinder.API.Controllers
                 .Include(c => c.Availabilities)
                 .Include(c => c.Reviews)
                 .Include(c => c.GalleryMedia)
+                .Include(c => c.Partner)
                 .ToListAsync();
 
             var response = coaches.Select(coach => new
@@ -74,28 +71,54 @@ namespace PTfinder.API.Controllers
                 coach.Gender,
                 coach.Price,
                 coach.Description,
-                Category = coach.Category?.Name,
-                Speciality = new { coach.Speciality?.Id, coach.Speciality?.Name },
+
+                // Location Data
                 Country = coach.Country?.Name,
                 City = coach.City?.Name,
                 Area = coach.Area?.Name,
+
+                // Category / Specialty
+                Category = coach.Category?.Name,
+                Speciality = new { coach.Speciality?.Id, coach.Speciality?.Name },
+
+                // Profile Image (with SAS link)
                 ProfileImage = string.IsNullOrWhiteSpace(coach.ProfileImage)
                     ? null
                     : _blobs.GetReadUrl(coach.ProfileImage, TimeSpan.FromMinutes(60)),
+
+                // Availability
                 Availabilities = coach.Availabilities.Select(a => new
                 {
                     a.Id,
                     AvailableDate = a.AvailableDate.ToString("yyyy-MM-dd"),
                     a.TimeSlot
-                }).ToList()
+                }),
+
+
+                // Subscription Info
+                coach.SubscriptionTier,
+                coach.SubscriptionStatus,
+                coach.SubscriptionStartedAtUtc,
+                coach.SubscriptionExpiresAtUtc,
+                coach.CurrentPeriodEndUtc,
+                coach.StripeCustomerId,
+                coach.StripeSubscriptionId,
+
+                // Freelancer or Company Coach
+       
+
+                // Flags
+                coach.EmailVerified,
+                coach.IsActive,
+                coach.CreatedAtUtc,
+                coach.UpdatedAtUtc
             });
 
             return Ok(response);
         }
 
-        // ─────────────────────────────────────────────────────────────────────────
-        // GET: api/coaches/{id}
-        // ─────────────────────────────────────────────────────────────────────────
+
+
         [HttpGet("{id}")]
         public async Task<IActionResult> GetCoach(int id)
         {
@@ -108,6 +131,7 @@ namespace PTfinder.API.Controllers
                 .Include(c => c.Availabilities)
                 .Include(c => c.Reviews)
                 .Include(c => c.GalleryMedia)
+                .Include(c => c.Partner)
                 .FirstOrDefaultAsync(c => c.Id == id);
 
             if (coach == null) return NotFound();
@@ -121,24 +145,46 @@ namespace PTfinder.API.Controllers
                 coach.Gender,
                 coach.Price,
                 coach.Description,
-                Category = coach.Category?.Name,
-                Speciality = new { coach.Speciality?.Id, coach.Speciality?.Name },
+
                 Country = coach.Country?.Name,
                 City = coach.City?.Name,
                 Area = coach.Area?.Name,
+
+                Category = coach.Category?.Name,
+                Speciality = new { coach.Speciality?.Id, coach.Speciality?.Name },
+
                 ProfileImage = string.IsNullOrWhiteSpace(coach.ProfileImage)
                     ? null
                     : _blobs.GetReadUrl(coach.ProfileImage, TimeSpan.FromMinutes(60)),
+
                 Availabilities = coach.Availabilities.Select(a => new
                 {
                     a.Id,
                     AvailableDate = a.AvailableDate.ToString("yyyy-MM-dd"),
                     a.TimeSlot
-                }).ToList()
+                }),
+
+
+
+                coach.SubscriptionTier,
+                coach.SubscriptionStatus,
+                coach.SubscriptionStartedAtUtc,
+                coach.SubscriptionExpiresAtUtc,
+                coach.CurrentPeriodEndUtc,
+                coach.StripeCustomerId,
+                coach.StripeSubscriptionId,
+
+             
+
+                coach.EmailVerified,
+                coach.IsActive,
+                coach.CreatedAtUtc,
+                coach.UpdatedAtUtc
             };
 
             return Ok(response);
         }
+
 
         // ─────────────────────────────────────────────────────────────────────────
         // GET: api/coaches/check-email?email=...
