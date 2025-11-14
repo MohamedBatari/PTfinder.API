@@ -218,7 +218,6 @@ namespace PTfinder.API.Services
                 {
                     "basic" => SubscriptionTier.Basic,
                     "standard" => SubscriptionTier.Standard,
-                    "premium" => SubscriptionTier.Premium,
                     _ => coach.SubscriptionTier
                 };
 

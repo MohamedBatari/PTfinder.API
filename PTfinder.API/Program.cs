@@ -60,6 +60,9 @@ StripeConfiguration.ApiKey = builder.Configuration["Stripe:SecretKey"];
 // Register your BillingService using the alias (prevents ambiguity with Stripe.BillingService)
 builder.Services.AddScoped<AppBillingService>();
 
+builder.Services.AddScoped<ICoachSubscriptionService, CoachSubscriptionService>();
+
+
 // ------------ CORS policy (for general API calls) ------------
 builder.Services.AddCors(options =>
 {
@@ -102,7 +105,6 @@ builder.Services.AddControllers()
 
 // ------------ Other app services ------------
 builder.Services.AddSingleton<BlobStorageService>();
-builder.Services.AddScoped<PartnerService>(); // Partner seat enforcement & coach linking
 
 // ------------ API behavior tweaks ------------
 builder.Services.Configure<ApiBehaviorOptions>(o =>

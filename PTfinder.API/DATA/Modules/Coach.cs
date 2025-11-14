@@ -1,4 +1,5 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿using Stripe;
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace PTfinder.API.DATA.Modules
@@ -9,7 +10,6 @@ namespace PTfinder.API.DATA.Modules
         None = 0,     // not subscribed
         Basic = 1,    // AED 49 / month
         Standard = 2, // AED 149 / month
-        Premium = 3   // AED 249 / month
     }
 
     public enum SubscriptionStatus
@@ -84,10 +84,7 @@ namespace PTfinder.API.DATA.Modules
         public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
         public DateTime? UpdatedAtUtc { get; set; }
 
-        // Read-only: treat company coaches as Premium automatically
-        [NotMapped]
-        public SubscriptionTier EffectiveTier =>
-            PartnerId.HasValue ? SubscriptionTier.Premium : SubscriptionTier;
+       
     }
 }
 

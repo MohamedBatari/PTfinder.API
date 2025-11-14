@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using PTfinder.API.DATA.Modules;
+using Stripe;
 
 namespace PTfinder.API.DATA
 {
@@ -14,7 +15,6 @@ namespace PTfinder.API.DATA
         public DbSet<Availability> Availabilities { get; set; } = null!;
         public DbSet<Booking> Bookings { get; set; } = null!;
         public DbSet<Review> Reviews { get; set; } = null!;
-        public DbSet<Subscription> Subscriptions { get; set; } = null!;
         public DbSet<Country> Countries { get; set; } = null!;
         public DbSet<City> Cities { get; set; } = null!;
         public DbSet<Area> Areas { get; set; } = null!;
@@ -143,6 +143,9 @@ namespace PTfinder.API.DATA
             // Useful indexes
             modelBuilder.Entity<Coach>().HasIndex(c => c.PartnerId);
             modelBuilder.Entity<Coach>().HasIndex(c => c.Email);
+
+            modelBuilder.Ignore<StripeResponse>();
+            modelBuilder.Ignore<Subscription>();
 
 
 
