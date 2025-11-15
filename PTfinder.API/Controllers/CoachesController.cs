@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using PTfinder.API.DATA;
 using PTfinder.API.DATA.DTO;
@@ -20,17 +21,21 @@ namespace PTfinder.API.Controllers
         private readonly BlobStorageService _blobs;
         private readonly IEmailSender _sender;
         private readonly SmtpSettings _smtp;
+        private readonly ILogger<CoachesController> _logger;
+
 
         public CoachesController(
             AppDbContext context,
             BlobStorageService blobs,
             IEmailSender sender,
-            IOptions<SmtpSettings> smtp)
+            IOptions<SmtpSettings> smtp, ILogger<CoachesController> logger)
         {
             _context = context;
             _blobs = blobs;
             _sender = sender;
             _smtp = smtp.Value;
+            _logger = logger;
+
         }
 
         private Dictionary<string, string> FlowHeaders(string flow) => new()
