@@ -127,91 +127,92 @@ namespace PTfinder.API.Controllers
         [HttpGet("{id}")]
         public async Task<IActionResult> GetCoach(int id)
         {
-            var coach = await _context.Coaches
-                .Include(c => c.Category)
-                .Include(c => c.Speciality)
-                .Include(c => c.Country)
-                .Include(c => c.City)
-                .Include(c => c.Area)
-                .Include(c => c.Availabilities)
-                .Include(c => c.Reviews)
-                .Include(c => c.GalleryMedia)
-                .Include(c => c.Partner)
-                .FirstOrDefaultAsync(c => c.Id == id);
-
-            if (coach == null) return NotFound();
-
-            // ---- SAFE PROFILE IMAGE ----
-            string? profileImageUrl = null;
-
-            if (!string.IsNullOrWhiteSpace(coach.ProfileImage))
+            try
             {
-                try
+                var coach = await _context.Coaches
+                    .Include(c => c.Category)
+                    .Include(c => c.Speciality)
+                    .Include(c => c.Country)
+                    .Include(c => c.City)
+                    .Include(c => c.Area)
+                    .Include(c => c.Availabilities)
+                    .Include(c => c.Reviews)
+                    .Include(c => c.GalleryMedia)
+                    .Include(c => c.Partner)
+                    .FirstOrDefaultAsync(c => c.Id == id);
+
+                if (coach == null)
+                    return NotFound();
+
+                // ❌ NO _blobs, NO SAS URL here – just return the blob name for now
+                var response = new
                 {
-                    // if blob exists, this returns a signed URL
-                    profileImageUrl = _blobs.GetReadUrl(coach.ProfileImage, TimeSpan.FromMinutes(60));
-                }
-                catch
-                {
-                    // if blob is missing or any error: just return null, don't 500
-                    profileImageUrl = null;
-                }
+                    coach.Id,
+                    coach.FullName,
+                    coach.Email,
+                    coach.PhoneNumber,
+                    coach.Gender,
+                    coach.Price,
+                    coach.Description,
+
+                    // IDs (for Settings dropdown defaults)
+                    coach.CountryId,
+                    coach.CityId,
+                    coach.AreaId,
+                    coach.CategoryId,
+                    coach.SpecialityId,
+
+                    // Names (for display)
+                    Country = coach.Country?.Name,
+                    City = coach.City?.Name,
+                    Area = coach.Area?.Name,
+
+                    Category = coach.Category?.Name,
+                    Speciality = new
+                    {
+                        Id = coach.Speciality?.Id,
+                        Name = coach.Speciality?.Name
+                    },
+
+                    // Just the stored blob name (or null) – frontend can handle it
+                    ProfileImage = string.IsNullOrWhiteSpace(coach.ProfileImage)
+                        ? null
+                        : coach.ProfileImage,
+
+                    Availabilities = coach.Availabilities.Select(a => new
+                    {
+                        a.Id,
+                        AvailableDate = a.AvailableDate.ToString("yyyy-MM-dd"),
+                        a.TimeSlot
+                    }),
+
+                    // subscription fields
+                    coach.SubscriptionTier,
+                    coach.SubscriptionStatus,
+                    coach.SubscriptionStartedAtUtc,
+                    coach.SubscriptionExpiresAtUtc,
+                    coach.CurrentPeriodEndUtc,
+                    coach.StripeCustomerId,
+                    coach.StripeSubscriptionId,
+
+                    coach.EmailVerified,
+                    coach.IsActive,
+                    coach.CreatedAtUtc,
+                    coach.UpdatedAtUtc
+                };
+
+                return Ok(response);
             }
-
-            var response = new
+            catch (Exception ex)
             {
-                coach.Id,
-                coach.FullName,
-                coach.Email,
-                coach.PhoneNumber,
-                coach.Gender,
-                coach.Price,
-                coach.Description,
-
-                // IDs for dropdown defaults
-                coach.CountryId,
-                coach.CityId,
-                coach.AreaId,
-                coach.CategoryId,
-                coach.SpecialityId,
-
-                // names for display
-                Country = coach.Country?.Name,
-                City = coach.City?.Name,
-                Area = coach.Area?.Name,
-
-                Category = coach.Category?.Name,
-                Speciality = new
+                // TEMP: return error details so you can see what’s happening
+                return StatusCode(500, new
                 {
-                    Id = coach.Speciality?.Id,
-                    Name = coach.Speciality?.Name
-                },
-
-                ProfileImage = profileImageUrl,
-
-                Availabilities = coach.Availabilities.Select(a => new
-                {
-                    a.Id,
-                    AvailableDate = a.AvailableDate.ToString("yyyy-MM-dd"),
-                    a.TimeSlot
-                }),
-
-                // subscription fields
-                coach.SubscriptionTier,
-                coach.SubscriptionStatus,
-                coach.SubscriptionStartedAtUtc,
-                coach.SubscriptionExpiresAtUtc,
-                coach.CurrentPeriodEndUtc,
-                coach.StripeCustomerId,
-                coach.StripeSubscriptionId,
-
-                coach.EmailVerified,
-                coach.IsActive,
-                coach.CreatedAtUtc,
-                coach.UpdatedAtUtc
-            };
-
-            return Ok(response);
+                    message = "Error in GetCoach",
+                    error = ex.Message,
+                    stack = ex.StackTrace
+                });
+            }
         }
 
 
