@@ -134,25 +134,7 @@ namespace PTfinder.API.Controllers
                 .Include(c => c.Partner)
                 .FirstOrDefaultAsync(c => c.Id == id);
 
-            if (coach == null)
-                return NotFound();
-
-            // 🔹 SAFE PROFILE IMAGE URL (no more 500 if blob is missing)
-            string? profileImageUrl = null;
-
-            if (!string.IsNullOrWhiteSpace(coach.ProfileImage))
-            {
-                try
-                {
-                    // If blob exists, generate a read URL (SAS or public)
-                    profileImageUrl = _blobs.GetReadUrl(coach.ProfileImage, TimeSpan.FromMinutes(60));
-                }
-                catch
-                {
-                    // If blob not found / any error → just return null instead of crashing
-                    profileImageUrl = null;
-                }
-            }
+            if (coach == null) return NotFound();
 
             var response = new
             {
@@ -164,29 +146,17 @@ namespace PTfinder.API.Controllers
                 coach.Price,
                 coach.Description,
 
-                // 🔹 IDs for dropdown defaults in Settings.jsx
-                coach.CountryId,
-                coach.CityId,
-                coach.AreaId,
-                coach.CategoryId,
-                coach.SpecialityId,
-
-                // 🔹 Names for display
                 Country = coach.Country?.Name,
                 City = coach.City?.Name,
                 Area = coach.Area?.Name,
 
                 Category = coach.Category?.Name,
-                Speciality = new
-                {
-                    Id = coach.Speciality?.Id,
-                    Name = coach.Speciality?.Name
-                },
+                Speciality = new { coach.Speciality?.Id, coach.Speciality?.Name },
 
-                // 🔹 Safe image URL
-                ProfileImage = profileImageUrl,
+                ProfileImage = string.IsNullOrWhiteSpace(coach.ProfileImage)
+                    ? null
+                    : _blobs.GetReadUrl(coach.ProfileImage, TimeSpan.FromMinutes(60)),
 
-                // 🔹 Availabilities
                 Availabilities = coach.Availabilities.Select(a => new
                 {
                     a.Id,
@@ -194,7 +164,8 @@ namespace PTfinder.API.Controllers
                     a.TimeSlot
                 }),
 
-                // 🔹 Subscription info
+
+
                 coach.SubscriptionTier,
                 coach.SubscriptionStatus,
                 coach.SubscriptionStartedAtUtc,
@@ -202,6 +173,8 @@ namespace PTfinder.API.Controllers
                 coach.CurrentPeriodEndUtc,
                 coach.StripeCustomerId,
                 coach.StripeSubscriptionId,
+
+             
 
                 coach.EmailVerified,
                 coach.IsActive,
