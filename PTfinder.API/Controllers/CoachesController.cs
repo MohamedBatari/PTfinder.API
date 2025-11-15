@@ -139,27 +139,21 @@ namespace PTfinder.API.Controllers
                 .Include(c => c.Partner)
                 .FirstOrDefaultAsync(c => c.Id == id);
 
-            if (coach == null)
-                return NotFound();
+            if (coach == null) return NotFound();
 
-            // 🔹 Safe ProfileImage URL (don't crash when blob is missing / invalid)
+            // ---- SAFE PROFILE IMAGE ----
             string? profileImageUrl = null;
 
             if (!string.IsNullOrWhiteSpace(coach.ProfileImage))
             {
                 try
                 {
+                    // if blob exists, this returns a signed URL
                     profileImageUrl = _blobs.GetReadUrl(coach.ProfileImage, TimeSpan.FromMinutes(60));
                 }
-                catch (Exception ex)
+                catch
                 {
-                    // optional logging so you see which blob is bad, but no 500 for client
-                    _logger.LogWarning(
-                        ex,
-                        "Failed to generate blob URL for coach {CoachId} – blob name: {BlobName}",
-                        coach.Id,
-                        coach.ProfileImage
-                    );
+                    // if blob is missing or any error: just return null, don't 500
                     profileImageUrl = null;
                 }
             }
@@ -174,13 +168,14 @@ namespace PTfinder.API.Controllers
                 coach.Price,
                 coach.Description,
 
-                // 🔹 IDs for Settings.jsx to set default values in selects
+                // IDs for dropdown defaults
                 coach.CountryId,
                 coach.CityId,
                 coach.AreaId,
                 coach.CategoryId,
                 coach.SpecialityId,
 
+                // names for display
                 Country = coach.Country?.Name,
                 City = coach.City?.Name,
                 Area = coach.Area?.Name,
@@ -192,7 +187,7 @@ namespace PTfinder.API.Controllers
                     Name = coach.Speciality?.Name
                 },
 
-                ProfileImage = profileImageUrl,   // ✅ safe
+                ProfileImage = profileImageUrl,
 
                 Availabilities = coach.Availabilities.Select(a => new
                 {
@@ -201,6 +196,7 @@ namespace PTfinder.API.Controllers
                     a.TimeSlot
                 }),
 
+                // subscription fields
                 coach.SubscriptionTier,
                 coach.SubscriptionStatus,
                 coach.SubscriptionStartedAtUtc,
@@ -217,6 +213,7 @@ namespace PTfinder.API.Controllers
 
             return Ok(response);
         }
+
 
 
 
