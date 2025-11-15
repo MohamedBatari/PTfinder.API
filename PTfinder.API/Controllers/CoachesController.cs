@@ -410,19 +410,46 @@ We’re here to help — reply to this email if you need assistance.
             if (coach == null)
                 return NotFound();
 
-            coach.FullName = dto.FullName;
-            coach.Email = dto.Email;
-            coach.PhoneNumber = dto.PhoneNumber;
-            coach.Password = dto.Password;
-            coach.Gender = dto.Gender;
-            coach.Price = dto.Price;
-            coach.Description = dto.Description;
-            coach.CategoryId = dto.CategoryId;
-            coach.SpecialityId = dto.SpecialityId;
-            coach.CountryId = dto.CountryId;
-            coach.CityId = dto.CityId;
-            coach.AreaId = dto.AreaId;
+            // Only update fields that were actually sent
 
+            if (!string.IsNullOrWhiteSpace(dto.FullName))
+                coach.FullName = dto.FullName;
+
+            if (!string.IsNullOrWhiteSpace(dto.Email))
+                coach.Email = dto.Email;
+
+            if (!string.IsNullOrWhiteSpace(dto.PhoneNumber))
+                coach.PhoneNumber = dto.PhoneNumber;
+
+            // Only change password if user sent something
+            if (!string.IsNullOrWhiteSpace(dto.Password))
+                coach.Password = dto.Password; // TODO: hash
+
+            if (!string.IsNullOrWhiteSpace(dto.Gender))
+                coach.Gender = dto.Gender;
+
+            if (dto.Price.HasValue)
+                coach.Price = dto.Price.Value;
+
+            if (!string.IsNullOrWhiteSpace(dto.Description))
+                coach.Description = dto.Description;
+
+            if (dto.CategoryId.HasValue && dto.CategoryId.Value > 0)
+                coach.CategoryId = dto.CategoryId.Value;
+
+            if (dto.SpecialityId.HasValue && dto.SpecialityId.Value > 0)
+                coach.SpecialityId = dto.SpecialityId.Value;
+
+            if (dto.CountryId.HasValue && dto.CountryId.Value > 0)
+                coach.CountryId = dto.CountryId.Value;
+
+            if (dto.CityId.HasValue && dto.CityId.Value > 0)
+                coach.CityId = dto.CityId.Value;
+
+            if (dto.AreaId.HasValue && dto.AreaId.Value > 0)
+                coach.AreaId = dto.AreaId.Value;
+
+            // Profile image (optional)
             if (dto.ProfileImage != null && dto.ProfileImage.Length > 0)
             {
                 var newName = Guid.NewGuid() + Path.GetExtension(dto.ProfileImage.FileName);
@@ -434,11 +461,10 @@ We’re here to help — reply to this email if you need assistance.
                 if (!string.IsNullOrWhiteSpace(coach.ProfileImage))
                     await _blobs.DeleteAsync(coach.ProfileImage);
 
-                coach.ProfileImage = newName; // store new blob name
+                coach.ProfileImage = newName;
             }
 
             await _context.SaveChangesAsync();
-
             return NoContent();
         }
 
