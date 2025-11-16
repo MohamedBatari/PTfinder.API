@@ -144,7 +144,11 @@ namespace PTfinder.API.Controllers
                 if (coach == null)
                     return NotFound();
 
-                // ❌ NO _blobs, NO SAS URL here – just return the blob name for now
+                // build SAS URL for profile image (same style as Search)
+                var profileImageUrl = string.IsNullOrWhiteSpace(coach.ProfileImage)
+                    ? null
+                    : _blobs.GetReadUrl(coach.ProfileImage, TimeSpan.FromMinutes(60));
+
                 var response = new
                 {
                     coach.Id,
@@ -155,7 +159,7 @@ namespace PTfinder.API.Controllers
                     coach.Price,
                     coach.Description,
 
-                    // IDs (for Settings dropdown defaults)
+                    // IDs (for Settings)
                     coach.CountryId,
                     coach.CityId,
                     coach.AreaId,
@@ -166,7 +170,6 @@ namespace PTfinder.API.Controllers
                     Country = coach.Country?.Name,
                     City = coach.City?.Name,
                     Area = coach.Area?.Name,
-
                     Category = coach.Category?.Name,
                     Speciality = new
                     {
@@ -174,10 +177,8 @@ namespace PTfinder.API.Controllers
                         Name = coach.Speciality?.Name
                     },
 
-                    // Just the stored blob name (or null) – frontend can handle it
-                    ProfileImage = string.IsNullOrWhiteSpace(coach.ProfileImage)
-                        ? null
-                        : coach.ProfileImage,
+                    // ✅ full URL, ready for <img src="...">
+                    ProfileImage = profileImageUrl,
 
                     Availabilities = coach.Availabilities.Select(a => new
                     {
@@ -205,15 +206,11 @@ namespace PTfinder.API.Controllers
             }
             catch (Exception ex)
             {
-                // TEMP: return error details so you can see what’s happening
-                return StatusCode(500, new
-                {
-                    message = "Error in GetCoach",
-                    error = ex.Message,
-                    stack = ex.StackTrace
-                });
+                _logger.LogError(ex, "Error in GetCoach({Id})", id);
+                return StatusCode(500, new { message = "Error in GetCoach", error = ex.Message });
             }
         }
+
 
 
 
