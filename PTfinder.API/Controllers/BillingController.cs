@@ -311,21 +311,25 @@ namespace PTfinder.API.Controllers
                 CancelUrl = cancelUrl,
                 PaymentMethodTypes = new List<string> { "card" },
                 LineItems = new List<SessionLineItemOptions>
-                {
-                    new SessionLineItemOptions
-                    {
-                        Price = priceId,
-                        Quantity = 1
-                    }
-                },
+        {
+            new SessionLineItemOptions
+            {
+                Price = priceId,
+                Quantity = 1
+            }
+        },
                 ClientReferenceId = req.CoachId.ToString(),
                 Metadata = new Dictionary<string, string>
                 {
                     ["plan"] = plan,
                     ["billingPeriod"] = req.Yearly ? "yearly" : "monthly",
                     ["kind"] = "subscription"
+                },
+                // ✅ 14-day free trial – Stripe will check card, but first charge only after trial end
+                SubscriptionData = new SessionSubscriptionDataOptions
+                {
+                    TrialPeriodDays = 14
                 }
-                // Trial days come from the Stripe Price configuration (14 days)
             };
 
             var svc = new SessionService();
