@@ -234,14 +234,16 @@ namespace PTfinder.API.Controllers
         // ─────────────────────────────────────────────────────────────────────────
         [HttpGet("Search")]
         public async Task<IActionResult> Search(
-     [FromQuery] int? CategoryId,
-     [FromQuery] int? SpecialityId,
-     [FromQuery] int? CountryId,
-     [FromQuery] int? CityId,
-     [FromQuery] int? AreaId,
-     [FromQuery] string? Gender,
-     [FromQuery] string? FullName)
+         [FromQuery] int? CategoryId,
+         [FromQuery] int? SpecialityId,
+         [FromQuery] int? CountryId,
+         [FromQuery] int? CityId,
+         [FromQuery] int? AreaId,
+         [FromQuery] string? Gender,
+         [FromQuery] string? FullName)
         {
+            var nowUtc = DateTime.UtcNow;
+
             var query = _context.Coaches
                 .Include(c => c.Category)
                 .Include(c => c.Speciality)
@@ -268,7 +270,9 @@ namespace PTfinder.API.Controllers
             if (!string.IsNullOrWhiteSpace(Gender))
             {
                 var g = Gender.Trim().ToLower();
-                query = query.Where(c => !string.IsNullOrEmpty(c.Gender) && c.Gender.ToLower() == g);
+                query = query.Where(c =>
+                    !string.IsNullOrEmpty(c.Gender) &&
+                    c.Gender.ToLower() == g);
             }
 
             if (!string.IsNullOrWhiteSpace(FullName))
@@ -276,6 +280,17 @@ namespace PTfinder.API.Controllers
                 var f = FullName.Trim().ToLower();
                 query = query.Where(c => c.FullName.ToLower().Contains(f));
             }
+
+            // 🔥 ONLY active subscriptions "till date"
+            query = query.Where(c =>
+                c.IsActive &&                           // coach active
+                c.EmailVerified &&                      // email verified (optional but recommended)
+                c.SubscriptionTier > 0 &&               // has a paid/active tier
+                (
+                    (c.SubscriptionExpiresAtUtc.HasValue && c.SubscriptionExpiresAtUtc > nowUtc) ||
+                    (c.CurrentPeriodEndUtc.HasValue && c.CurrentPeriodEndUtc > nowUtc)
+                )
+            );
 
             var result = await query
                 .Select(c => new
@@ -287,21 +302,30 @@ namespace PTfinder.API.Controllers
                         : _blobs.GetReadUrl(c.ProfileImage, TimeSpan.FromMinutes(60)),
                     c.Price,
                     c.Description,
+
                     CategoryId = c.CategoryId,
                     SpecialityId = c.SpecialityId,
                     CountryId = c.CountryId,
                     CityId = c.CityId,
                     AreaId = c.AreaId,
+
                     CategoryName = c.Category != null ? c.Category.Name : null,
                     SpecialtyName = c.Speciality != null ? c.Speciality.Name : null,
                     CountryName = c.Country != null ? c.Country.Name : null,
                     CityName = c.City != null ? c.City.Name : null,
-                    AreaName = c.Area != null ? c.Area.Name : null
+                    AreaName = c.Area != null ? c.Area.Name : null,
+
+                    // 👇 expose subscription info to frontend (if you want)
+                    c.SubscriptionTier,
+                    c.SubscriptionStatus,
+                    c.SubscriptionExpiresAtUtc,
+                    c.CurrentPeriodEndUtc
                 })
                 .ToListAsync();
 
             return Ok(result);
         }
+
         // GET /api/Coaches/Names?q=mo   -> suggestions that start with "mo"
         // If q is missing/empty, returns all coach names (you may cap the count if large)
         [HttpGet("Names")]
