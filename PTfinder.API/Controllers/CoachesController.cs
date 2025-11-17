@@ -187,7 +187,7 @@ namespace PTfinder.API.Controllers
                         a.TimeSlot
                     }),
 
-                    // subscription fields
+                    // ===== SUBSCRIPTION FIELDS =====
                     coach.SubscriptionTier,
                     coach.SubscriptionStatus,
                     coach.SubscriptionStartedAtUtc,
@@ -195,6 +195,12 @@ namespace PTfinder.API.Controllers
                     coach.CurrentPeriodEndUtc,
                     coach.StripeCustomerId,
                     coach.StripeSubscriptionId,
+
+                    // ===== STRIPE STATUS (NEW) =====
+                    StripeAccountId = coach.StripeAccountId,
+                    StripeChargesEnabled = coach.StripeChargesEnabled,
+                    StripePayoutsEnabled = coach.StripePayoutsEnabled,
+                    StripeDetailsSubmitted = coach.StripeDetailsSubmitted,
 
                     coach.EmailVerified,
                     coach.IsActive,
@@ -210,6 +216,7 @@ namespace PTfinder.API.Controllers
                 return StatusCode(500, new { message = "Error in GetCoach", error = ex.Message });
             }
         }
+
 
 
 

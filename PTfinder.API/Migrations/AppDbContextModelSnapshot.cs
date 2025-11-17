@@ -228,8 +228,17 @@ namespace PTfinder.API.Migrations
                     b.Property<string>("StripeAccountId")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<bool>("StripeChargesEnabled")
+                        .HasColumnType("bit");
+
                     b.Property<string>("StripeCustomerId")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("StripeDetailsSubmitted")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("StripePayoutsEnabled")
+                        .HasColumnType("bit");
 
                     b.Property<string>("StripeSubscriptionId")
                         .HasColumnType("nvarchar(max)");
@@ -563,33 +572,6 @@ namespace PTfinder.API.Migrations
                     b.ToTable("Specialities");
                 });
 
-            modelBuilder.Entity("PTfinder.API.DATA.Modules.Subscription", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("CoachId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("EndDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
-
-                    b.Property<DateTime>("StartDate")
-                        .HasColumnType("datetime2");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CoachId");
-
-                    b.ToTable("Subscriptions");
-                });
-
             modelBuilder.Entity("Review", b =>
                 {
                     b.Property<int>("Id")
@@ -770,17 +752,6 @@ namespace PTfinder.API.Migrations
                     b.Navigation("Category");
                 });
 
-            modelBuilder.Entity("PTfinder.API.DATA.Modules.Subscription", b =>
-                {
-                    b.HasOne("PTfinder.API.DATA.Modules.Coach", "Coach")
-                        .WithMany("Subscriptions")
-                        .HasForeignKey("CoachId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Coach");
-                });
-
             modelBuilder.Entity("Review", b =>
                 {
                     b.HasOne("PTfinder.API.DATA.Modules.Coach", null)
@@ -811,8 +782,6 @@ namespace PTfinder.API.Migrations
                     b.Navigation("GalleryMedia");
 
                     b.Navigation("Reviews");
-
-                    b.Navigation("Subscriptions");
                 });
 
             modelBuilder.Entity("PTfinder.API.DATA.Modules.Country", b =>

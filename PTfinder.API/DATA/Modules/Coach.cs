@@ -1,6 +1,7 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
+
 namespace PTfinder.API.DATA.Modules
 {
     // ====== SUBSCRIPTION ENUMS (freelancers) ======
@@ -24,7 +25,7 @@ namespace PTfinder.API.DATA.Modules
     {
         public int Id { get; set; }
 
-        // ===== YOUR EXISTING FIELDS =====
+        // ===== CORE FIELDS =====
         public string FullName { get; set; }
         public string Email { get; set; }
         public string Password { get; set; }           // (later: store hash)
@@ -32,8 +33,16 @@ namespace PTfinder.API.DATA.Modules
         public string Gender { get; set; }
         public decimal Price { get; set; }
         public string Description { get; set; }
+
+        // Stripe connected account (for payouts / gifts)
         public string? StripeAccountId { get; set; }
 
+        // NEW: Stripe status flags (filled from Stripe Account object)
+        public bool StripeChargesEnabled { get; set; }
+        public bool StripePayoutsEnabled { get; set; }
+        public bool StripeDetailsSubmitted { get; set; }
+
+        // ===== LOCATION / CATEGORY =====
         public int CountryId { get; set; }
         public Country Country { get; set; }
 
@@ -51,21 +60,23 @@ namespace PTfinder.API.DATA.Modules
 
         public string ProfileImage { get; set; }
 
+        // ===== EMAIL VERIFICATION =====
         public bool EmailVerified { get; set; } = false;
         public string? EmailVerificationToken { get; set; }
         public DateTime? EmailVerificationExpiresUtc { get; set; }
 
+        // ===== NAV PROPERTIES =====
         public List<Availability> Availabilities { get; set; }
         public List<Booking> Bookings { get; set; }
         public ICollection<Review> Reviews { get; set; }
         public ICollection<GalleryMedia> GalleryMedia { get; set; }
 
-        // ===== NEW: Company (Partner) linkage =====
+        // ===== Company (Partner) linkage =====
         // Null => freelancer. Not null => company coach (auto gets Premium benefits)
         public int? PartnerId { get; set; }
         public Partner? Partner { get; set; }
 
-        // ===== NEW: Freelancer subscription tracking =====
+        // ===== Freelancer subscription tracking =====
         // These apply only when PartnerId == null
         public SubscriptionTier SubscriptionTier { get; set; } = SubscriptionTier.None;
         public SubscriptionStatus SubscriptionStatus { get; set; } = SubscriptionStatus.Inactive;
@@ -77,12 +88,9 @@ namespace PTfinder.API.DATA.Modules
         public string? StripeSubscriptionId { get; set; }
         public DateTime? CurrentPeriodEndUtc { get; set; }
 
-        // Convenience flags
+        // ===== Convenience flags =====
         public bool IsActive { get; set; } = true;
         public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
         public DateTime? UpdatedAtUtc { get; set; }
-
-       
     }
 }
-
