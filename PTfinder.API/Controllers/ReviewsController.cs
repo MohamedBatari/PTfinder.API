@@ -83,7 +83,7 @@ namespace PTfinder.API.Controllers
 
             var email = payload.Email.Trim().ToLowerInvariant();
 
-            // Ensure coach exists
+            // Ensure coach exists (still a good check)
             var coach = await _context.Coaches
                 .AsNoTracking()
                 .FirstOrDefaultAsync(c => c.Id == reviewDto.CoachId, ct);
@@ -91,12 +91,8 @@ namespace PTfinder.API.Controllers
             if (coach == null)
                 return NotFound("PT not found.");
 
-            // Block self-review (coach email == reviewer email)
-            if (!string.IsNullOrWhiteSpace(coach.Email) &&
-                string.Equals(coach.Email.Trim(), email, StringComparison.OrdinalIgnoreCase))
-            {
-                return BadRequest("You cannot review your own PT profile.");
-            }
+            // ❌ NO MORE self-review blocking here
+            // We only block duplicate reviews from same email for same coach.
 
             // One review per Google email per PT
             var already = await _context.Reviews
@@ -144,3 +140,4 @@ namespace PTfinder.API.Controllers
         }
     }
 }
+
