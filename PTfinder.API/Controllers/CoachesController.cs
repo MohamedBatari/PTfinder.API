@@ -216,7 +216,7 @@ namespace PTfinder.API.Controllers
                 return StatusCode(500, new { message = "Error in GetCoach", error = ex.Message });
             }
         }
-
+   
 
 
 
@@ -373,12 +373,18 @@ namespace PTfinder.API.Controllers
                 blobName = fileName;
             }
 
+            var now = DateTime.UtcNow;
+            var end = now.AddMonths(12); // ✅ change to 6 if you want
+
             var coach = new Coach
             {
-                FullName = dto.FullName,
-                Email = dto.Email,
+                FullName = dto.FullName?.Trim(),
+                Email = dto.Email?.Trim().ToLower(),
                 PhoneNumber = dto.PhoneNumber,
-                Password = dto.Password, // TODO: hash in production
+
+                // ✅ hash password
+                Password = BCrypt.Net.BCrypt.HashPassword(dto.Password),
+
                 Gender = dto.Gender,
                 Price = dto.Price,
                 Description = dto.Description,
@@ -388,19 +394,43 @@ namespace PTfinder.API.Controllers
                 CityId = dto.CityId,
                 AreaId = dto.AreaId,
                 ProfileImage = blobName,
-                EmailVerified = true // email has been verified via OTP at signup
+
+                // ✅ Verified via OTP in your flow
+                EmailVerified = true,
+                IsActive = true,
+
+                // ✅ PRELAUNCH: Auto Premium (ENUMS)
+                SubscriptionTier = (SubscriptionTier)1,        // Premium
+                SubscriptionStatus = (SubscriptionStatus)2,    // Active
+                SubscriptionStartedAtUtc = now,
+                SubscriptionExpiresAtUtc = end,
+                CurrentPeriodEndUtc = end,
+
+                // ✅ Stripe not used in prelaunch
+                StripeCustomerId = null,
+                StripeSubscriptionId = null,
+
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
             };
 
             _context.Coaches.Add(coach);
             await _context.SaveChangesAsync();
 
             // Send Welcome email (coach)
-            var first = (coach.FullName ?? "there").Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "there";
+            var first = (coach.FullName ?? "there")
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                .FirstOrDefault() ?? "there";
+
             var subject = $"Welcome to PTfinderNow, {first}";
+            var premiumUntil = coach.SubscriptionExpiresAtUtc?.ToString("yyyy-MM-dd");
+
             var text =
-$@"Hi {first},
+        $@"Hi {first},
 
 Welcome aboard. Let’s set you up for success.
+
+🎁 Premium Early Access is active until: {premiumUntil}
 
 Get started:
 • Finish your coach profile (specialties, certifications, and a clear bio)
@@ -427,6 +457,7 @@ We’re here to help — reply to this email if you need assistance.
 
             return CreatedAtAction(nameof(GetCoach), new { id = coach.Id }, coach);
         }
+
 
         // ─────────────────────────────────────────────────────────────────────────
         // PUT: api/coaches/{id}  (multipart/form-data)
