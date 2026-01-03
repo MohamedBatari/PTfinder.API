@@ -400,8 +400,8 @@ namespace PTfinder.API.Controllers
                 IsActive = true,
 
                 // ✅ PRELAUNCH: Auto Premium (ENUMS)
-                SubscriptionTier = (SubscriptionTier)1,        // Premium
-                SubscriptionStatus = (SubscriptionStatus)2,    // Active
+                SubscriptionTier = (SubscriptionTier)2,        // Premium
+                SubscriptionStatus = (SubscriptionStatus)1,    // Active
                 SubscriptionStartedAtUtc = now,
                 SubscriptionExpiresAtUtc = end,
                 CurrentPeriodEndUtc = end,
