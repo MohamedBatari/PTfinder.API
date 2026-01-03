@@ -374,7 +374,18 @@ namespace PTfinder.API.Controllers
             }
 
             var now = DateTime.UtcNow;
-            var end = now.AddMonths(12); // ✅ change to 6 if you want
+            var end = now.AddMonths(12); // ✅ prelaunch free premium duration (change to 3/6/12)
+
+            // ✅ (Optional but nice) get names for email copy
+            var categoryName = await _context.Categories
+                .Where(x => x.Id == dto.CategoryId)
+                .Select(x => x.Name)
+                .FirstOrDefaultAsync();
+
+            var specialityName = await _context.Specialities
+                .Where(x => x.Id == dto.SpecialityId)
+                .Select(x => x.Name)
+                .FirstOrDefaultAsync();
 
             var coach = new Coach
             {
@@ -382,8 +393,9 @@ namespace PTfinder.API.Controllers
                 Email = dto.Email?.Trim().ToLower(),
                 PhoneNumber = dto.PhoneNumber,
 
-                // ✅ hash password
-                Password = BCrypt.Net.BCrypt.HashPassword(dto.Password),
+                // ✅ Prelaunch: keep as-is (NO HASH)
+                // ⚠️ You already know: this is not secure for production
+                Password = dto.Password,
 
                 Gender = dto.Gender,
                 Price = dto.Price,
@@ -395,18 +407,18 @@ namespace PTfinder.API.Controllers
                 AreaId = dto.AreaId,
                 ProfileImage = blobName,
 
-                // ✅ Verified via OTP in your flow
+                // ✅ Verified via OTP
                 EmailVerified = true,
                 IsActive = true,
 
-                // ✅ PRELAUNCH: Auto Premium (ENUMS)
-                SubscriptionTier = (SubscriptionTier)2,        // Premium
-                SubscriptionStatus = (SubscriptionStatus)1,    // Active
+                // ✅ PRELAUNCH: Auto Premium
+                SubscriptionTier = SubscriptionTier.Standard,           // better than casting ints
+                SubscriptionStatus = SubscriptionStatus.Active,
                 SubscriptionStartedAtUtc = now,
                 SubscriptionExpiresAtUtc = end,
                 CurrentPeriodEndUtc = end,
 
-                // ✅ Stripe not used in prelaunch
+                // ✅ Stripe later (when approved)
                 StripeCustomerId = null,
                 StripeSubscriptionId = null,
 
@@ -417,31 +429,52 @@ namespace PTfinder.API.Controllers
             _context.Coaches.Add(coach);
             await _context.SaveChangesAsync();
 
-            // Send Welcome email (coach)
+            // ✅ Welcome email
             var first = (coach.FullName ?? "there")
                 .Split(' ', StringSplitOptions.RemoveEmptyEntries)
                 .FirstOrDefault() ?? "there";
 
-            var subject = $"Welcome to PTfinderNow, {first}";
-            var premiumUntil = coach.SubscriptionExpiresAtUtc?.ToString("yyyy-MM-dd");
+            var subject = $"Welcome to PTfinderNow — Premium Early Access is Active ✅";
+            var premiumUntil = end.ToString("yyyy-MM-dd");
+
+            // fallback if names not found
+            categoryName = string.IsNullOrWhiteSpace(categoryName) ? "your selected category" : categoryName;
+            specialityName = string.IsNullOrWhiteSpace(specialityName) ? "your selected speciality" : specialityName;
 
             var text =
         $@"Hi {first},
 
-Welcome aboard. Let’s set you up for success.
+Welcome to PTfinderNow 👋
+Your account is now live — and you’ve been automatically upgraded to **Premium Early Access**.
 
-🎁 Premium Early Access is active until: {premiumUntil}
+✅ Premium Early Access active until: {premiumUntil}
 
-Get started:
-• Finish your coach profile (specialties, certifications, and a clear bio)
-• Add pricing and the services you offer
-• Set availability and preferred training locations
-• Enable notifications so you never miss a request
+Your profile setup:
+• Category: {categoryName}
+• Speciality: {specialityName}
+
+What you can access right now:
+• Search listing (priority ranking)
+• Contact info (WhatsApp, phone, email)
+• Booking notifications (coach + client)
+• Full PT Calendar (availability, slots, confirmations)
+• Dashboard access (full features)
+• Gallery (images)
+• Gallery (videos)
+• Reviews
+• Receive Thanks Gifts (once Stripe is approved)
+• Advanced profile analytics
+
+Next best steps (recommended):
+1) Add a strong profile photo + gallery (your profile converts more)
+2) Add availability for this week
+3) Add 2–3 short reviews (even from past clients)
+4) Share your PTfinderNow link on WhatsApp/Instagram to get your first requests
 
 Go to your dashboard:
 https://ptfindernow.com/dashboard
 
-We’re here to help — reply to this email if you need assistance.
+Need help? Reply to info@ptfindernow.com our team will assist you.
 
 {EmailText.Footer}";
 
@@ -450,8 +483,8 @@ We’re here to help — reply to this email if you need assistance.
                 subject: subject,
                 htmlBody: null,
                 textBody: text,
-                headers: FlowHeaders("welcome-coach"),
-                tags: new[] { ("role", "coach"), ("flow", "welcome-coach") },
+                headers: FlowHeaders("welcome-coach-premium-prelaunch"),
+                tags: new[] { ("role", "coach"), ("flow", "welcome-coach-premium-prelaunch") },
                 fromOverride: SafeFrom(_smtp?.FromAddresses?.Welcome)
             );
 
