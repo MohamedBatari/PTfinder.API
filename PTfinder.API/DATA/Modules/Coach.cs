@@ -99,5 +99,11 @@ namespace PTfinder.API.DATA.Modules
         public string? UserAgent { get; set; }       // optional
         public string? ClientTimeZone { get; set; }  // optional
 
+        public string? PrivacyVersionAccepted { get; set; }
+        public DateTime? PrivacyAcceptedAtUtc { get; set; }
+        public string? PrivacyAcceptedIp { get; set; }   // optional
+        public string? PrivacyLanguage { get; set; }     // "en" or "ar" (optional)
+
+
     }
 }

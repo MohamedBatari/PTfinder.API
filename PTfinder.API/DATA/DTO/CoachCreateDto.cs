@@ -26,6 +26,13 @@
         public string? UserAgent { get; set; }
         public string? ClientTimeZone { get; set; }
 
+        public bool PrivacyAccepted { get; set; }
+        public string? PrivacyVersion { get; set; }
+        public DateTime? PrivacyAcceptedAtUtc { get; set; }
+
+        public string? ConsentLanguage { get; set; } // "en" or "ar"
+
+
     }
 
 }

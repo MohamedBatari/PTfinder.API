@@ -363,19 +363,26 @@ namespace PTfinder.API.Controllers
         [HttpPost]
         public async Task<ActionResult<Coach>> PostCoach([FromForm] CoachCreateDto dto)
         {
-            // ✅ Enforce Terms acceptance (legal)
+            // ✅ Enforce Terms + Privacy acceptance
             if (!dto.TermsAccepted || string.IsNullOrWhiteSpace(dto.TermsVersion))
                 return BadRequest(new { error = "You must accept the Terms and Conditions." });
 
-            // ✅ Optional: basic sanity for version length
+            if (!dto.PrivacyAccepted || string.IsNullOrWhiteSpace(dto.PrivacyVersion))
+                return BadRequest(new { error = "You must accept the Privacy Policy." });
+
+            // ✅ sanity checks
             if (dto.TermsVersion.Length > 20)
                 return BadRequest(new { error = "Invalid Terms version." });
 
-            // ✅ Capture IP (optional but strong)
-            var ip =
-                HttpContext?.Connection?.RemoteIpAddress?.ToString()
-                ?? Request.Headers["X-Forwarded-For"].FirstOrDefault()
-                ?? null;
+            if (dto.PrivacyVersion.Length > 20)
+                return BadRequest(new { error = "Invalid Privacy version." });
+
+            // ✅ Capture IP (best practice: check proxy header first)
+            string? ip = null;
+            var xff = Request.Headers["X-Forwarded-For"].FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(xff))
+                ip = xff.Split(',').FirstOrDefault()?.Trim(); // first IP is client
+            ip ??= HttpContext?.Connection?.RemoteIpAddress?.ToString();
 
             string? blobName = null;
 
@@ -388,9 +395,9 @@ namespace PTfinder.API.Controllers
             }
 
             var now = DateTime.UtcNow;
-            var end = now.AddMonths(12); // ✅ prelaunch free premium duration (change to 3/6/12)
+            var end = now.AddMonths(12); // ✅ prelaunch free premium duration
 
-            // ✅ (Optional but nice) get names for email copy
+            // ✅ (Optional) get names for welcome email
             var categoryName = await _context.Categories
                 .Where(x => x.Id == dto.CategoryId)
                 .Select(x => x.Name)
@@ -401,14 +408,22 @@ namespace PTfinder.API.Controllers
                 .Select(x => x.Name)
                 .FirstOrDefaultAsync();
 
+            // ✅ fallback if not found
+            categoryName = string.IsNullOrWhiteSpace(categoryName) ? "your selected category" : categoryName;
+            specialityName = string.IsNullOrWhiteSpace(specialityName) ? "your selected speciality" : specialityName;
+
+            // ✅ Normalize consent language (en/ar)
+            var consentLang = string.IsNullOrWhiteSpace(dto.ConsentLanguage)
+                ? null
+                : dto.ConsentLanguage.Trim().ToLower(); // "en" or "ar"
+
             var coach = new Coach
             {
                 FullName = dto.FullName?.Trim(),
                 Email = dto.Email?.Trim().ToLower(),
                 PhoneNumber = dto.PhoneNumber,
 
-                // ✅ Prelaunch: keep as-is (NO HASH)
-                // ⚠️ You already know: this is not secure for production
+                // ✅ Prelaunch (NO HASH)
                 Password = dto.Password,
 
                 Gender = dto.Gender,
@@ -432,14 +447,22 @@ namespace PTfinder.API.Controllers
                 SubscriptionExpiresAtUtc = end,
                 CurrentPeriodEndUtc = end,
 
-                // ✅ Stripe later (when approved)
+                // ✅ Stripe later
                 StripeCustomerId = null,
                 StripeSubscriptionId = null,
 
-                // ✅ Terms acceptance stored
+                // ✅ Terms acceptance
                 TermsVersionAccepted = dto.TermsVersion.Trim(),
                 TermsAcceptedAtUtc = dto.TermsAcceptedAtUtc ?? now,
                 TermsAcceptedIp = ip,
+
+                // ✅ Privacy acceptance
+                PrivacyVersionAccepted = dto.PrivacyVersion.Trim(),
+                PrivacyAcceptedAtUtc = dto.PrivacyAcceptedAtUtc ?? now,
+                PrivacyAcceptedIp = ip,
+                PrivacyLanguage = consentLang,
+
+                // ✅ Client metadata
                 UserAgent = dto.UserAgent,
                 ClientTimeZone = dto.ClientTimeZone,
 
@@ -455,55 +478,82 @@ namespace PTfinder.API.Controllers
                 .Split(' ', StringSplitOptions.RemoveEmptyEntries)
                 .FirstOrDefault() ?? "there";
 
-            var subject = $"Welcome to PTfinderNow — Premium Early Access is Active ✅";
+            var subject = $"Welcome to PTfinderNow — Your Expert Profile Is Live 🚀";
             var premiumUntil = end.ToString("yyyy-MM-dd");
 
-            // fallback if names not found
-            categoryName = string.IsNullOrWhiteSpace(categoryName) ? "your selected category" : categoryName;
-            specialityName = string.IsNullOrWhiteSpace(specialityName) ? "your selected speciality" : specialityName;
+            // ✅ Your Azure logo (update if storage account name differs)
+            var logoUrl = "https://ptfindernow.com/images/PtFinderNow.png";
 
+            // ✅ HTML (Amazon-style)
+            var html = PTfinder.API.Services.Emails.EmailTemplates.WelcomeCoachHtml(
+                firstName: first,
+                premiumUntil: premiumUntil,
+                categoryName: categoryName,
+                specialityName: specialityName,
+                logoUrl: logoUrl,
+                dashboardUrl: "https://ptfindernow.com/dashboard",
+                supportEmail: "info@ptfindernow.com"
+            );
+
+            // ✅ Text fallback (your message stays)
             var text =
         $@"Hi {first},
 
-Welcome to PTfinderNow 👋
-Your account is now live — and you’ve been automatically upgraded to **Premium Early Access**.
+Welcome to PTfinderNow 👋  
+We’re excited to have you onboard.
 
-✅ Premium Early Access active until: {premiumUntil}
+Your expert profile is now live on PTfinderNow, a platform designed to help professionals like you attract clients, manage bookings, and grow visibility — all in one place.
 
-Your profile setup:
-• Category: {categoryName}
-• Speciality: {specialityName}
+🎯 What PTfinderNow does for you:
+• Makes your profile publicly discoverable by new clients
+• Shows your availability so clients can book faster
+• Displays your contact details (WhatsApp, phone, email) for direct inquiries
+• Collects reviews to build trust and credibility
+• Centralizes your gallery, pricing, and professional info
+• Saves you time managing requests and schedules
 
-What you can access right now:
-• Search listing (priority ranking)
-• Contact info (WhatsApp, phone, email)
-• Booking notifications (coach + client)
-• Full PT Calendar (availability, slots, confirmations)
-• Dashboard access (full features)
-• Gallery (images)
-• Gallery (videos)
-• Reviews
-• Receive Thanks Gifts (once Stripe is approved)
-• Advanced profile analytics
+⭐ Use PTfinderNow with your existing clients
+PTfinderNow isn’t only for new clients.
 
-Next best steps (recommended):
-1) Add a strong profile photo + gallery (your profile converts more)
-2) Add availability for this week
-3) Add 2–3 short reviews (even from past clients)
-4) Share your PTfinderNow link on WhatsApp/Instagram to get your first requests
+You can also:
+• Share your profile link with previous clients
+• Ask them to leave a short review
+• Use your availability calendar instead of back-and-forth messages
+• Keep everything professional and organized in one place
 
-Go to your dashboard:
+Many experts see faster growth when they add just **2–3 reviews from past clients**.
+
+🚀 Your Early Access Benefits
+As part of our early access program, your account currently includes premium features at no cost:
+• Priority visibility
+• Full calendar & booking tools
+• Gallery & reviews
+• Advanced profile features
+• Access to future monetization tools (Thanks Gifts)
+
+📌 Recommended next steps:
+1) Upload a high-quality profile photo  
+2) Add your availability for this week  
+3) Add 2–3 reviews from previous clients  
+4) Share your PTfinderNow profile link on WhatsApp or Instagram  
+
+👉 Go to your dashboard:
 https://ptfindernow.com/dashboard
 
-Need help? Reply to info@ptfindernow.com our team will assist you.
+If you need help or have questions, our team is here for you:
+📧 info@ptfindernow.com
 
-{EmailText.Footer}";
+We’re happy to have you with us and look forward to seeing you grow on PTfinderNow.
+
+Best regards,  
+**The PTfinderNow Team**
+{PTfinder.API.Helpers.EmailText.Footer}";
 
             await _sender.SendAsync(
                 to: coach.Email,
                 subject: subject,
-                htmlBody: null,
-                textBody: text,
+                htmlBody: html,    // ✅ HTML now enabled
+                textBody: text,    // ✅ fallback still included
                 headers: FlowHeaders("welcome-coach-premium-prelaunch"),
                 tags: new[] { ("role", "coach"), ("flow", "welcome-coach-premium-prelaunch") },
                 fromOverride: SafeFrom(_smtp?.FromAddresses?.Welcome)
@@ -511,7 +561,6 @@ Need help? Reply to info@ptfindernow.com our team will assist you.
 
             return CreatedAtAction(nameof(GetCoach), new { id = coach.Id }, coach);
         }
-
 
         // ─────────────────────────────────────────────────────────────────────────
         // PUT: api/coaches/{id}  (multipart/form-data)
