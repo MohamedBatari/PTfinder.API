@@ -10,7 +10,6 @@ using PTfinder.API.Helpers;
 using PTfinder.API.Services;
 using PTfinder.API.Settings;
 using System.IO;
-using PTfinder.API.Services.Emails;
 
 
 namespace PTfinder.API.Controllers
@@ -489,7 +488,7 @@ namespace PTfinder.API.Controllers
             var logoUrl = "https://ptfindernow.com/images/PtFinderNow.png";
 
             // ✅ HTML (Amazon-style)
-            var html = EmailTemplates.WelcomeCoachHtml(
+            var html = PTfinder.API.EmailTemplates.WelcomeCoachHtml(
                 firstName: first,
                 premiumUntil: premiumUntil,
                 categoryName: categoryName,
