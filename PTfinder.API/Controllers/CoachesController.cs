@@ -10,6 +10,8 @@ using PTfinder.API.Helpers;
 using PTfinder.API.Services;
 using PTfinder.API.Settings;
 using System.IO;
+using PTfinder.API.Services.Emails;
+
 
 namespace PTfinder.API.Controllers
 {
@@ -472,6 +474,7 @@ namespace PTfinder.API.Controllers
 
             _context.Coaches.Add(coach);
             await _context.SaveChangesAsync();
+
 
             // ✅ Welcome email
             var first = (coach.FullName ?? "there")
