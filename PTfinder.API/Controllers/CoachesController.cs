@@ -26,6 +26,7 @@ namespace PTfinder.API.Controllers
         private readonly ILogger<CoachesController> _logger;
 
 
+
         public CoachesController(
             AppDbContext context,
             BlobStorageService blobs,
@@ -488,7 +489,7 @@ namespace PTfinder.API.Controllers
             var logoUrl = "https://ptfindernow.com/images/PtFinderNow.png";
 
             // ✅ HTML (Amazon-style)
-            var html = PTfinder.API.Services.Emails.EmailTemplates.WelcomeCoachHtml(
+            var html = EmailTemplates.WelcomeCoachHtml(
                 firstName: first,
                 premiumUntil: premiumUntil,
                 categoryName: categoryName,
