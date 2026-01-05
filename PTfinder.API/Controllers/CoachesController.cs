@@ -10,7 +10,7 @@ using PTfinder.API.Helpers;
 using PTfinder.API.Services;
 using PTfinder.API.Settings;
 using System.IO;
-using PTfinder.API.Services.Emails;
+using PTfinder.API.Services.Emails;        // ✅ (this one is correct)
 
 
 namespace PTfinder.API.Controllers
