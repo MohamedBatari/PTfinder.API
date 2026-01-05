@@ -221,6 +221,18 @@ namespace PTfinder.API.Migrations
                         .HasPrecision(10, 2)
                         .HasColumnType("decimal(10,2)");
 
+                    b.Property<DateTime?>("PrivacyAcceptedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("PrivacyAcceptedIp")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("PrivacyLanguage")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("PrivacyVersionAccepted")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("ProfileImage")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
