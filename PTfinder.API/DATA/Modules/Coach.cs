@@ -92,5 +92,12 @@ namespace PTfinder.API.DATA.Modules
         public bool IsActive { get; set; } = true;
         public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
         public DateTime? UpdatedAtUtc { get; set; }
+
+        public string? TermsVersionAccepted { get; set; }
+        public DateTime? TermsAcceptedAtUtc { get; set; }
+        public string? TermsAcceptedIp { get; set; } // optional
+        public string? UserAgent { get; set; }       // optional
+        public string? ClientTimeZone { get; set; }  // optional
+
     }
 }

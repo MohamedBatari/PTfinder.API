@@ -363,6 +363,20 @@ namespace PTfinder.API.Controllers
         [HttpPost]
         public async Task<ActionResult<Coach>> PostCoach([FromForm] CoachCreateDto dto)
         {
+            // ✅ Enforce Terms acceptance (legal)
+            if (!dto.TermsAccepted || string.IsNullOrWhiteSpace(dto.TermsVersion))
+                return BadRequest(new { error = "You must accept the Terms and Conditions." });
+
+            // ✅ Optional: basic sanity for version length
+            if (dto.TermsVersion.Length > 20)
+                return BadRequest(new { error = "Invalid Terms version." });
+
+            // ✅ Capture IP (optional but strong)
+            var ip =
+                HttpContext?.Connection?.RemoteIpAddress?.ToString()
+                ?? Request.Headers["X-Forwarded-For"].FirstOrDefault()
+                ?? null;
+
             string? blobName = null;
 
             if (dto.ProfileImage != null && dto.ProfileImage.Length > 0)
@@ -412,7 +426,7 @@ namespace PTfinder.API.Controllers
                 IsActive = true,
 
                 // ✅ PRELAUNCH: Auto Premium
-                SubscriptionTier = SubscriptionTier.Standard,           // better than casting ints
+                SubscriptionTier = SubscriptionTier.Standard,
                 SubscriptionStatus = SubscriptionStatus.Active,
                 SubscriptionStartedAtUtc = now,
                 SubscriptionExpiresAtUtc = end,
@@ -421,6 +435,13 @@ namespace PTfinder.API.Controllers
                 // ✅ Stripe later (when approved)
                 StripeCustomerId = null,
                 StripeSubscriptionId = null,
+
+                // ✅ Terms acceptance stored
+                TermsVersionAccepted = dto.TermsVersion.Trim(),
+                TermsAcceptedAtUtc = dto.TermsAcceptedAtUtc ?? now,
+                TermsAcceptedIp = ip,
+                UserAgent = dto.UserAgent,
+                ClientTimeZone = dto.ClientTimeZone,
 
                 CreatedAtUtc = now,
                 UpdatedAtUtc = now

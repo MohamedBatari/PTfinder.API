@@ -19,6 +19,13 @@
         public int SpecialityId { get; set; }
 
         public IFormFile ProfileImage { get; set; }
+
+        public bool TermsAccepted { get; set; }
+        public string? TermsVersion { get; set; }
+        public DateTime? TermsAcceptedAtUtc { get; set; }
+        public string? UserAgent { get; set; }
+        public string? ClientTimeZone { get; set; }
+
     }
 
 }

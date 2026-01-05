@@ -166,6 +166,9 @@ namespace PTfinder.API.Migrations
                     b.Property<int>("CityId")
                         .HasColumnType("int");
 
+                    b.Property<string>("ClientTimeZone")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<int>("CountryId")
                         .HasColumnType("int");
 
@@ -255,8 +258,20 @@ namespace PTfinder.API.Migrations
                     b.Property<int>("SubscriptionTier")
                         .HasColumnType("int");
 
+                    b.Property<DateTime?>("TermsAcceptedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("TermsAcceptedIp")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("TermsVersionAccepted")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("datetime2");
+
+                    b.Property<string>("UserAgent")
+                        .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
 
