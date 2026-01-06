@@ -13,8 +13,8 @@ using PTfinder.API.Settings;
 using PTfinder.API.DATA.DTO;
 using PTfinder.API.Helpers;
 using System.Text;
-using PTfinder.API.Helpers;
-
+using System.Net;
+using PTfinder.API.Services.Emails; // ✅ IMPORTANT (EmailTemplates)
 
 namespace PTfinder.API.Controllers;
 
@@ -41,6 +41,10 @@ public class AuthVerificationController : ControllerBase
 
     private static string NormalizeEmail(string? e) => (e ?? "").Trim().ToLowerInvariant();
     private string WebBaseUrl => _cfg["Web:BaseUrl"] ?? "https://ptfindernow.com";
+
+    // ✅ NEW: Logo URL for emails (absolute https)
+    private string EmailLogoUrl =>
+        _cfg["Email:LogoUrl"] ?? $"{WebBaseUrl.TrimEnd('/')}/assets/logo-email.png";
 
     private Dictionary<string, string> FlowHeaders(string flow) => new()
     {
@@ -82,7 +86,10 @@ public class AuthVerificationController : ControllerBase
             throw new InvalidOperationException("Jwt:Key is not configured.");
 
         var handler = new JwtSecurityTokenHandler();
-        var creds = new SigningCredentials(new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key)), SecurityAlgorithms.HmacSha256);
+        var creds = new SigningCredentials(
+            new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key)),
+            SecurityAlgorithms.HmacSha256
+        );
 
         var claims = new[]
         {
@@ -95,7 +102,8 @@ public class AuthVerificationController : ControllerBase
             claims: claims,
             notBefore: DateTime.UtcNow,
             expires: DateTime.UtcNow.AddMinutes(minutesValid),
-            signingCredentials: creds);
+            signingCredentials: creds
+        );
 
         return handler.WriteToken(token);
     }
@@ -114,6 +122,7 @@ public class AuthVerificationController : ControllerBase
             return BadRequest(new { error = "Invalid email." });
 
         var now = DateTime.UtcNow;
+
         var existing = await _db.EmailOtps
             .Where(x => x.Email == email && x.UsedAtUtc == null && x.ExpiresUtc > now)
             .OrderByDescending(x => x.Id)
@@ -136,7 +145,18 @@ public class AuthVerificationController : ControllerBase
         if (existing == null) _db.EmailOtps.Add(otp);
         await _db.SaveChangesAsync(ct);
 
-        var subject = $"Your verification code: {code} — PTfinderNow";
+        var subject = $"Your verification code — PTfinderNow";
+
+        // ✅ HTML version (mobile friendly)
+        var html = EmailTemplates.VerifyOtpHtml(
+            firstName: "there",
+            code: code,
+            expiresMinutes: minutes,
+            logoUrl: EmailLogoUrl,
+            supportEmail: _smtp?.FromAddresses?.Default ?? "info@ptfindernow.com"
+        );
+
+        // ✅ Text fallback
         var text =
 $@"Hi,
 
@@ -150,7 +170,7 @@ Do not share this code. It expires in {minutes} minutes.
         await _sender.SendAsync(
             to: email,
             subject: subject,
-            htmlBody: null,
+            htmlBody: html,   // ✅ CHANGED (was null)
             textBody: text,
             ct: ct,
             headers: FlowHeaders("verify-otp"),
@@ -216,4 +236,3 @@ public class VerifyOtpDto
     public string Email { get; set; } = "";
     public string Code { get; set; } = "";
 }
-
