@@ -13,8 +13,7 @@ using PTfinder.API.Settings;
 using PTfinder.API.DATA.DTO;
 using PTfinder.API.Helpers;
 using System.Text;
-using System.Net;
-using PTfinder.API.Services.Emails; // ✅ IMPORTANT (EmailTemplates)
+using PTfinder.API.Services.Emails;
 
 namespace PTfinder.API.Controllers;
 
@@ -42,9 +41,8 @@ public class AuthVerificationController : ControllerBase
     private static string NormalizeEmail(string? e) => (e ?? "").Trim().ToLowerInvariant();
     private string WebBaseUrl => _cfg["Web:BaseUrl"] ?? "https://ptfindernow.com";
 
-    // ✅ NEW: Logo URL for emails (absolute https)
     private string EmailLogoUrl =>
-        _cfg["Email:LogoUrl"] ?? $"{WebBaseUrl.TrimEnd('/')}/assets/logo-email.png";
+        _cfg["Email:LogoUrl"] ?? $"{WebBaseUrl.TrimEnd('/')}/images/PtFinderNow.png";
 
     private Dictionary<string, string> FlowHeaders(string flow) => new()
     {
@@ -66,12 +64,6 @@ public class AuthVerificationController : ControllerBase
         return list;
     }
 
-    private string? SafeFrom(string? preferredFrom)
-    {
-        var chosen = string.IsNullOrWhiteSpace(preferredFrom) ? _smtp?.FromAddresses?.Default : preferredFrom;
-        return string.IsNullOrWhiteSpace(chosen) ? null : chosen;
-    }
-
     private static string HashOtp(string email, string code)
     {
         using var sha = SHA256.Create();
@@ -81,9 +73,7 @@ public class AuthVerificationController : ControllerBase
 
     private string IssueEmailProofJwt(string email, int minutesValid)
     {
-        var key = _cfg["Jwt:Key"];
-        if (string.IsNullOrWhiteSpace(key))
-            throw new InvalidOperationException("Jwt:Key is not configured.");
+        var key = _cfg["Jwt:Key"] ?? throw new InvalidOperationException("Jwt:Key is not configured.");
 
         var handler = new JwtSecurityTokenHandler();
         var creds = new SigningCredentials(
@@ -108,10 +98,6 @@ public class AuthVerificationController : ControllerBase
         return handler.WriteToken(token);
     }
 
-    // ===========================
-    // OTP: request  (POST /api/auth/request-otp)
-    // Body: { email, expiresMinutes? }
-    // ===========================
     [HttpPost("request-otp")]
     public async Task<IActionResult> RequestOtp([FromBody] RequestVerificationDto dto, CancellationToken ct)
     {
@@ -128,7 +114,6 @@ public class AuthVerificationController : ControllerBase
             .OrderByDescending(x => x.Id)
             .FirstOrDefaultAsync(ct);
 
-        // Rate-limit resend to ~45s
         if (existing != null && (now - existing.LastSentUtc).TotalSeconds < 45)
             return BadRequest(new { error = "Please wait before requesting another code." });
 
@@ -145,18 +130,17 @@ public class AuthVerificationController : ControllerBase
         if (existing == null) _db.EmailOtps.Add(otp);
         await _db.SaveChangesAsync(ct);
 
-        var subject = $"Your verification code — PTfinderNow";
+        var subject = "Your verification code — PTfinderNow";
 
-        // ✅ HTML version (mobile friendly)
         var html = EmailTemplates.VerifyOtpHtml(
             firstName: "there",
             code: code,
             expiresMinutes: minutes,
             logoUrl: EmailLogoUrl,
-            supportEmail: _smtp?.FromAddresses?.Default ?? "info@ptfindernow.com"
+            supportEmail: "info@ptfindernow.com",
+            webBaseUrl: WebBaseUrl
         );
 
-        // ✅ Text fallback
         var text =
 $@"Hi,
 
@@ -170,22 +154,17 @@ Do not share this code. It expires in {minutes} minutes.
         await _sender.SendAsync(
             to: email,
             subject: subject,
-            htmlBody: html,   // ✅ CHANGED (was null)
+            htmlBody: html,
             textBody: text,
             ct: ct,
             headers: FlowHeaders("verify-otp"),
             tags: Tags(("flow", "verify-otp")),
-            fromOverride: SafeFrom(_smtp?.FromAddresses?.Verification)
+            fromOverride: null // ✅ always use SmtpSettings.From (no-reply)
         );
 
         return Ok(new { sent = true, expiresMinutes = minutes });
     }
 
-    // ===========================
-    // OTP: verify  (POST /api/auth/verify-otp)
-    // Body: { email, code }
-    // Returns: { verified, email, emailProof }
-    // ===========================
     [HttpPost("verify-otp")]
     public async Task<IActionResult> VerifyOtp([FromBody] VerifyOtpDto dto, CancellationToken ct)
     {
@@ -217,7 +196,6 @@ Do not share this code. It expires in {minutes} minutes.
         otp.UsedAtUtc = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
 
-        // If a coach already exists, mark verified
         var coach = await _db.Coaches.FirstOrDefaultAsync(c => c.Email.ToLower() == email, ct);
         if (coach is not null && !coach.EmailVerified)
         {
@@ -230,9 +208,10 @@ Do not share this code. It expires in {minutes} minutes.
     }
 }
 
-// DTO for OTP verify
 public class VerifyOtpDto
 {
     public string Email { get; set; } = "";
     public string Code { get; set; } = "";
 }
+
+

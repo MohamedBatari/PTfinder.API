@@ -4,7 +4,9 @@ using PTfinder.API.DATA;
 using PTfinder.API.DATA.Modules;
 using PTfinder.API.DATA.DTO;
 using PTfinder.API.Enums;
-using PTfinder.API.Services; 
+using PTfinder.API.Services;
+using PTfinder.API.Services.Emails;
+using Hangfire;
 
 namespace PTfinder.API.Controllers
 {
@@ -16,25 +18,48 @@ namespace PTfinder.API.Controllers
         private readonly INotificationService _notifications;
         private readonly IEmailSender _sender;
         private readonly IConfiguration _cfg;
+        private readonly IBackgroundJobClient _jobs;
 
         public BookingController(
             AppDbContext context,
             INotificationService notifications,
             IEmailSender sender,
-            IConfiguration cfg)
+            IConfiguration cfg,
+            IBackgroundJobClient jobs)
         {
             _context = context;
             _notifications = notifications;
             _sender = sender;
             _cfg = cfg;
+            _jobs = jobs;
         }
 
         private string WebBaseUrl => _cfg["Web:BaseUrl"] ?? "https://ptfindernow.com";
+        private string LogoUrl => _cfg["Branding:LogoUrl"] ?? $"{WebBaseUrl}/logo.png";
 
+        // ✅ If BookingDate is saved as Dubai local (Unspecified), convert correctly to UTC for Hangfire
+        private static DateTime DubaiLocalToUtc(DateTime bookingDate)
+        {
+            if (bookingDate.Kind == DateTimeKind.Utc) return bookingDate;
+
+            var tz = TimeZoneInfo.FindSystemTimeZoneById("Asia/Dubai");
+
+            if (bookingDate.Kind == DateTimeKind.Unspecified)
+                return TimeZoneInfo.ConvertTimeToUtc(bookingDate, tz);
+
+            // Local -> UTC
+            return bookingDate.ToUniversalTime();
+        }
+
+        private static string DubaiWhenText(DateTime bookingDate) =>
+            $"{bookingDate:yyyy-MM-dd HH:mm} (Asia/Dubai)";
+
+        // ---------------------------
+        // POST: Create booking
+        // ---------------------------
         [HttpPost]
         public async Task<ActionResult<Booking>> CreateBooking(BookingCreateDto dto, CancellationToken ct)
         {
-            // Basic guard
             if (!ModelState.IsValid)
                 return BadRequest(new { error = "Invalid request." });
 
@@ -56,12 +81,10 @@ namespace PTfinder.API.Controllers
             _context.Bookings.Add(booking);
             await _context.SaveChangesAsync(ct);
 
-            // ─────────────────────────────────────────────────────
-            // Real-time notification → Coach
-            // ─────────────────────────────────────────────────────
-            // serviceName/timezone: customize as you like or extend DTO
+            // Notification → Coach
             var serviceName = "session";
             var timezone = "Asia/Dubai";
+
             await _notifications.NotifyCoachBookingRequest(
                 coachId: booking.CoachId,
                 bookingId: booking.Id,
@@ -72,52 +95,92 @@ namespace PTfinder.API.Controllers
                 ct: ct
             );
 
-            // ─────────────────────────────────────────────────────
-            // Transactional emails (simple text)
-            // ─────────────────────────────────────────────────────
-            var when = $"{booking.BookingDate:yyyy-MM-dd HH:mm}";
-            var manageUrl = $"{WebBaseUrl}/dashboard/bookings/{booking.Id}";
+            var whenText = DubaiWhenText(booking.BookingDate);
+            var coachManageUrl = $"{WebBaseUrl}/dashboard/bookings/{booking.Id}";
 
-            // Email → Coach
-            await _sender.SendAsync(
-                to: coach.Email,
-                subject: $"New booking request — {serviceName} from {booking.StudentName}",
-                htmlBody: null,
-                textBody:
+            // Email → Coach (HAS manage link)
+            var coachHtml = EmailTemplates.BookingRequestCoachHtml(
+                coachName: coach.FullName ?? "Coach",
+                studentName: booking.StudentName ?? "",
+                studentEmail: booking.StudentEmail ?? "",
+                studentPhone: booking.StudentPhone ?? "",
+                whenText: whenText,
+                timeSlot: booking.TimeSlot ?? "",
+                manageUrl: coachManageUrl,
+                logoUrl: LogoUrl
+            );
+
+            var coachText =
 $@"You have a new booking request.
 
 Client: {booking.StudentName}
 Email: {booking.StudentEmail}
 Phone: {booking.StudentPhone}
-Date/Time: {when} (local)
+Date/Time: {whenText}
 Time Slot: {booking.TimeSlot}
 
-Manage this request:
-{manageUrl}
+Open in dashboard:
+{coachManageUrl}
 
-— PTfinderNow"
-            , ct: ct);
+— PTfinderNow";
 
-            // Email → Student (receipt)
             await _sender.SendAsync(
-                to: booking.StudentEmail,
-                subject: $"We sent your request to {coach.FullName} — ",
-                htmlBody: null,
-                textBody:
+                to: coach.Email,
+                subject: $"New booking request — {serviceName} from {booking.StudentName}",
+                htmlBody: coachHtml,
+                textBody: coachText,
+                ct: ct
+            );
+
+            // Email → Student (NO manage link)
+            var studentHtml = EmailTemplates.BookingRequestStudentHtml(
+                studentName: booking.StudentName ?? "Client",
+                coachName: coach.FullName ?? "Coach",
+                whenText: whenText,
+                timeSlot: booking.TimeSlot ?? "",
+                logoUrl: LogoUrl
+            );
+
+            var studentText =
 $@"Your booking request was sent to {coach.FullName}.
 
-Requested time: {when}
+Requested time: {whenText}
 Time Slot: {booking.TimeSlot}
 
-We'll email you when the coach confirms or proposes a new time.
+You'll receive an email when the coach confirms or declines.
 
+— PTfinderNow";
 
-— PTfinderNow"
-            , ct: ct);
+            await _sender.SendAsync(
+                to: booking.StudentEmail,
+                subject: $"Your request was sent to {coach.FullName} — PTfinderNow",
+                htmlBody: studentHtml,
+                textBody: studentText,
+                ct: ct
+            );
 
             return CreatedAtAction(nameof(GetBooking), new { id = booking.Id }, booking);
         }
 
+        // ---------------------------
+        // GET: booking by id
+        // ---------------------------
+        [HttpGet("{id}")]
+        public async Task<ActionResult<Booking>> GetBooking(int id, CancellationToken ct)
+        {
+            var booking = await _context.Bookings
+                .Include(b => b.Coach)
+                .FirstOrDefaultAsync(b => b.Id == id, ct);
+
+            if (booking == null)
+                return NotFound();
+
+            return Ok(booking);
+        }
+
+        // ---------------------------
+        // GET: bookings by coach
+        // ---------------------------
         [HttpGet("coach/{coachId}")]
         public async Task<IActionResult> GetBookingsByCoachId(int coachId, CancellationToken ct)
         {
@@ -132,20 +195,9 @@ We'll email you when the coach confirms or proposes a new time.
             return Ok(bookings);
         }
 
-        [HttpGet("{id}")]
-        public async Task<ActionResult<Booking>> GetBooking(int id, CancellationToken ct)
-        {
-            var booking = await _context.Bookings
-                .Include(b => b.Coach)
-                .FirstOrDefaultAsync(b => b.Id == id, ct);
-
-            if (booking == null)
-                return NotFound();
-
-            return Ok(booking);
-        }
-
-        // Controllers/BookingController.cs  (full method)
+        // ---------------------------
+        // PUT: update status
+        // ---------------------------
         [HttpPut("{id}/status")]
         public async Task<IActionResult> UpdateBookingStatus(int id, [FromBody] BookingStatusDto statusDto, CancellationToken ct)
         {
@@ -156,80 +208,118 @@ We'll email you when the coach confirms or proposes a new time.
             if (booking == null)
                 return NotFound($"Booking with ID {id} not found.");
 
-            var previous = booking.Status;
             booking.Status = statusDto.Status;
             await _context.SaveChangesAsync(ct);
 
-            // Common bits
             var coach = booking.Coach!;
-            var serviceName = "Personal training session";     // tweak if you store service name
-            var timezone = "Asia/Dubai";                       // tweak if you store user tz
-            var when = $"{booking.BookingDate:yyyy-MM-dd HH:mm}";
-            var manageUrl = $"{WebBaseUrl}/dashboard/bookings/{booking.Id}";
+            var whenText = DubaiWhenText(booking.BookingDate);
 
-            // Email → Student; Notification → Coach
+            // ✅ Schedule reminders ONLY when accepted
             if (statusDto.Status == BookingStatus.Accepted)
             {
-                // notify coach (receipt)
+                var startUtc = DubaiLocalToUtc(booking.BookingDate);
+
+                var run24 = startUtc.AddHours(-24);
+                if (run24 > DateTime.UtcNow.AddMinutes(1))
+                {
+                    _jobs.Schedule<IBookingReminderEmails>(
+                        x => x.SendStudentReminder(booking.Id, 24, CancellationToken.None),
+                        run24
+                    );
+                }
+
+                var run2 = startUtc.AddHours(-2);
+                if (run2 > DateTime.UtcNow.AddMinutes(1))
+                {
+                    _jobs.Schedule<IBookingReminderEmails>(
+                        x => x.SendStudentReminder(booking.Id, 2, CancellationToken.None),
+                        run2
+                    );
+                }
+
+                // Notify coach
                 await _notifications.NotifyCoachBookingConfirmed(
                     coachId: booking.CoachId,
                     bookingId: booking.Id,
                     clientName: booking.StudentName,
-                    serviceName: serviceName,
+                    serviceName: "session",
                     startsAtLocal: booking.BookingDate,
-                    timezone: timezone,
+                    timezone: "Asia/Dubai",
                     ct: ct);
 
-                // email student
-                await _sender.SendAsync(
-                    to: booking.StudentEmail,
-                    subject: $"Booking confirmed — with {coach.FullName}",
-                    htmlBody: null,
-                    textBody:
-        $@"Your booking is confirmed.
+                // Email student (confirmed)
+                var html = EmailTemplates.BookingAcceptedStudentHtml(
+                    studentName: booking.StudentName ?? "Client",
+                    coachName: coach.FullName ?? "Coach",
+                    whenText: whenText,
+                    timeSlot: booking.TimeSlot ?? "",
+                    logoUrl: LogoUrl
+                );
+
+                var text =
+$@"Booking confirmed ✅
 
 Coach: {coach.FullName}
-Date/Time: {when}
+Date/Time: {whenText}
 Time Slot: {booking.TimeSlot}
 
-Manage your booking:
+— PTfinderNow";
 
-— PTfinderNow",
+                await _sender.SendAsync(
+                    to: booking.StudentEmail,
+                    subject: $"Booking confirmed — with {coach.FullName} (PTfinderNow)",
+                    htmlBody: html,
+                    textBody: text,
                     ct: ct);
             }
             else if (statusDto.Status == BookingStatus.Cancelled)
             {
-                // notify coach (receipt)
                 await _notifications.NotifyCoachBookingDeclined(
                     coachId: booking.CoachId,
                     bookingId: booking.Id,
                     clientName: booking.StudentName,
-                    serviceName: serviceName,
+                    serviceName: "session",
                     startsAtLocal: booking.BookingDate,
-                    timezone: timezone,
+                    timezone: "Asia/Dubai",
                     ct: ct);
 
-                // email student
-                await _sender.SendAsync(
-                    to: booking.StudentEmail,
-                    subject: $"{coach.FullName} declined your request — ",
-                    htmlBody: null,
-                    textBody:
-        $@"Your booking request was declined by {coach.FullName}.
+                var searchUrl = $"{WebBaseUrl}/coaches/search";
 
-Requested time: {when}
+                var html = EmailTemplates.BookingDeclinedStudentHtml(
+                    studentName: booking.StudentName ?? "Client",
+                    coachName: coach.FullName ?? "Coach",
+                    whenText: whenText,
+                    timeSlot: booking.TimeSlot ?? "",
+                    searchUrl: searchUrl,
+                    logoUrl: LogoUrl
+                );
+
+                var text =
+$@"Booking declined ❌
+
+Coach: {coach.FullName}
+Requested time: {whenText}
 Time Slot: {booking.TimeSlot}
 
-You can try a different time or search for another coach:
-{WebBaseUrl}/Coaches/search
+Search for another coach:
+{searchUrl}
 
-— PTfinderNow",
+— PTfinderNow";
+
+                await _sender.SendAsync(
+                    to: booking.StudentEmail,
+                    subject: $"{coach.FullName} declined your request — PTfinderNow",
+                    htmlBody: html,
+                    textBody: text,
                     ct: ct);
             }
 
             return NoContent();
         }
 
+        // ---------------------------
+        // DELETE: booking
+        // ---------------------------
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteBooking(int id, CancellationToken ct)
         {

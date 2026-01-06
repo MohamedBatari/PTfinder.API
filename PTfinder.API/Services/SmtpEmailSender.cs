@@ -17,21 +17,55 @@ public sealed class SmtpEmailSender : IEmailSender
         _log = log;
     }
 
-    private static string ExtractEmail(string input)
+    private static string? ExtractEmail(string? input)
     {
         if (string.IsNullOrWhiteSpace(input)) return null;
+
         var s = input.Trim();
+
+        // Match: Name <email@domain>
         var m = Regex.Match(s, @"<\s*([^>\s]+@[^>\s]+)\s*>");
-        if (m.Success) s = m.Groups[1].Value; // support "Name <user@domain>"
+        if (m.Success) return m.Groups[1].Value;
+
+        // Else assume it's raw email
         return s;
     }
 
-    private static MailAddress RequireAddress(string raw, string label)
+    private static MailAddress RequireAddress(string? raw, string label)
     {
-        var email = ExtractEmail(raw);
-        if (!string.IsNullOrWhiteSpace(email) && MailAddress.TryCreate(email, out var addr))
-            return addr;
-        throw new FormatException($"Invalid {label} email: '{raw ?? "<null>"}'");
+        if (string.IsNullOrWhiteSpace(raw))
+            throw new FormatException($"Invalid {label} email: '<null>'");
+
+        try
+        {
+            // Keep display name if provided: "PTfinderNow <noreply@...>"
+            if (raw.Contains("<") && raw.Contains(">"))
+                return new MailAddress(raw.Trim());
+
+            var email = ExtractEmail(raw);
+            if (!string.IsNullOrWhiteSpace(email) && MailAddress.TryCreate(email, out var addr))
+                return addr;
+        }
+        catch
+        {
+            // ignore and throw below
+        }
+
+        throw new FormatException($"Invalid {label} email: '{raw}'");
+    }
+
+    private MailAddress ResolveFrom()
+    {
+        if (string.IsNullOrWhiteSpace(_cfg.From))
+            throw new InvalidOperationException("SMTP setting 'From' is missing.");
+
+        return RequireAddress(_cfg.From, "From");
+    }
+
+    private MailAddress? ResolveReplyTo()
+    {
+        if (string.IsNullOrWhiteSpace(_cfg.ReplyTo)) return null;
+        return RequireAddress(_cfg.ReplyTo, "ReplyTo");
     }
 
     public async Task SendAsync(
@@ -43,42 +77,70 @@ public sealed class SmtpEmailSender : IEmailSender
         Dictionary<string, string>? headers = null,
         IEnumerable<(string FileName, string ContentType, byte[] Bytes)>? attachments = null,
         IEnumerable<(string Name, string Value)>? tags = null,
-        string? fromOverride = null)
+        string? fromOverride = null // ignored by design
+    )
     {
-        // Resolve From in priority order
-        var fromRaw = !string.IsNullOrWhiteSpace(fromOverride)
-            ? fromOverride
-            : _cfg.FromAddresses?.Default;
-
-        var from = RequireAddress(fromRaw, "From");
+        var from = ResolveFrom();
         var toAddr = RequireAddress(to, "To");
+        var replyTo = ResolveReplyTo();
 
-        using var msg = new MailMessage { From = from, Subject = subject ?? "", BodyEncoding = Encoding.UTF8 };
+        using var msg = new MailMessage
+        {
+            From = from,
+            Subject = subject ?? "",
+            BodyEncoding = Encoding.UTF8,
+            SubjectEncoding = Encoding.UTF8,
+            IsBodyHtml = false
+        };
+
         msg.To.Add(toAddr);
 
-        if (!string.IsNullOrWhiteSpace(_cfg.ReplyTo))
-            msg.ReplyToList.Add(RequireAddress(_cfg.ReplyTo, "ReplyTo"));
+        if (replyTo != null)
+            msg.ReplyToList.Add(replyTo);
 
+        // Plain text first
         if (!string.IsNullOrWhiteSpace(textBody))
-            msg.AlternateViews.Add(AlternateView.CreateAlternateViewFromString(textBody, Encoding.UTF8, "text/plain"));
-        if (!string.IsNullOrWhiteSpace(htmlBody))
-            msg.AlternateViews.Add(AlternateView.CreateAlternateViewFromString(htmlBody, Encoding.UTF8, "text/html"));
+            msg.AlternateViews.Add(
+                AlternateView.CreateAlternateViewFromString(textBody, Encoding.UTF8, "text/plain"));
 
-        if (headers != null) foreach (var kv in headers) msg.Headers[kv.Key] = kv.Value;
-        if (tags != null) foreach (var (Name, Value) in tags) msg.Headers[$"X-PTN-{Name}"] = Value;
+        // HTML second
+        if (!string.IsNullOrWhiteSpace(htmlBody))
+            msg.AlternateViews.Add(
+                AlternateView.CreateAlternateViewFromString(htmlBody, Encoding.UTF8, "text/html"));
+
+        if (headers != null)
+            foreach (var kv in headers)
+                if (!string.IsNullOrWhiteSpace(kv.Key) && kv.Value != null)
+                    msg.Headers[kv.Key] = kv.Value;
+
+        if (tags != null)
+            foreach (var (Name, Value) in tags)
+                if (!string.IsNullOrWhiteSpace(Name) && Value != null)
+                    msg.Headers[$"X-PTN-{Name}"] = Value;
 
         if (attachments != null)
+        {
             foreach (var (FileName, ContentType, Bytes) in attachments)
-                msg.Attachments.Add(new Attachment(new MemoryStream(Bytes), ContentType) { Name = FileName });
+            {
+                var ms = new MemoryStream(Bytes);
+                msg.Attachments.Add(new Attachment(ms, ContentType) { Name = FileName });
+            }
+        }
 
         using var client = new SmtpClient(_cfg.Host, _cfg.Port)
         {
-            EnableSsl = true, // SMTP2GO supports TLS on 2525/587
+            EnableSsl = true,
             Credentials = new NetworkCredential(_cfg.User, _cfg.Pass),
             DeliveryMethod = SmtpDeliveryMethod.Network
         };
 
-        _log.LogInformation("SMTP send via {Host}:{Port} From={From} To={To}", _cfg.Host, _cfg.Port, from.Address, toAddr.Address);
+        _log.LogInformation(
+            "SMTP send via {Host}:{Port} From={From} ReplyTo={ReplyTo} To={To}",
+            _cfg.Host, _cfg.Port,
+            from.Address,
+            replyTo?.Address ?? "<none>",
+            toAddr.Address
+        );
 
         try
         {
@@ -92,4 +154,6 @@ public sealed class SmtpEmailSender : IEmailSender
         }
     }
 }
+
+
 

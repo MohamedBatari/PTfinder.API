@@ -15,6 +15,9 @@ using AppBillingService = PTfinder.API.Services.BillingService; // alias to avoi
 using Stripe;
 using System.Diagnostics;
 using System.Text;
+using Hangfire;
+using Hangfire.SqlServer;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -52,6 +55,26 @@ builder.Services.AddCors(o => o.AddPolicy("web",
         .AllowAnyMethod()
         .AllowCredentials()
 ));
+
+builder.Services.AddHangfire(config =>
+{
+    config.SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+          .UseSimpleAssemblyNameTypeSerializer()
+          .UseRecommendedSerializerSettings()
+          .UseSqlServerStorage(
+              builder.Configuration.GetConnectionString("Hangfire"),
+              new SqlServerStorageOptions
+              {
+                  CommandBatchMaxTimeout = TimeSpan.FromMinutes(5),
+                  SlidingInvisibilityTimeout = TimeSpan.FromMinutes(5),
+                  QueuePollInterval = TimeSpan.FromSeconds(15),
+                  UseRecommendedIsolationLevel = true,
+                  DisableGlobalLocks = true
+              });
+});
+
+builder.Services.AddHangfireServer();
+
 
 // ------------ Stripe settings & config ------------
 builder.Services.Configure<StripeSettings>(builder.Configuration.GetSection("Stripe"));
@@ -154,6 +177,8 @@ builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
 // ------------ Auth (JWT) ------------
 var jwtKey = builder.Configuration["Jwt:Key"]
     ?? throw new InvalidOperationException("Missing configuration: Jwt:Key");
+builder.Services.AddScoped<IBookingReminderEmails, BookingReminderEmails>();
+
 
 builder.Services.AddAuthentication(options =>
 {
@@ -318,6 +343,8 @@ app.MapHub<NotifyHub>("/hubs/notify");
 
 // ------------ Map controllers ------------
 app.MapControllers();
+app.UseHangfireDashboard("/hangfire");
+
 
 // ------------ Warm the DB once after startup ------------
 app.Lifetime.ApplicationStarted.Register(() =>

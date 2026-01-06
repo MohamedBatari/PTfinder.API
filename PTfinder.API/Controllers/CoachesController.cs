@@ -2,16 +2,12 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using PTfinder.API.DATA;
 using PTfinder.API.DATA.DTO;
 using PTfinder.API.DATA.Modules;
 using PTfinder.API.Helpers;
 using PTfinder.API.Services;
-using PTfinder.API.Settings;
-using System.IO;
-using PTfinder.API.Services.Emails;        // ✅ (this one is correct)
-
+using PTfinder.API.Services.Emails; // ✅ correct
 
 namespace PTfinder.API.Controllers
 {
@@ -22,23 +18,18 @@ namespace PTfinder.API.Controllers
         private readonly AppDbContext _context;
         private readonly BlobStorageService _blobs;
         private readonly IEmailSender _sender;
-        private readonly SmtpSettings _smtp;
         private readonly ILogger<CoachesController> _logger;
-
-
 
         public CoachesController(
             AppDbContext context,
             BlobStorageService blobs,
             IEmailSender sender,
-            IOptions<SmtpSettings> smtp, ILogger<CoachesController> logger)
+            ILogger<CoachesController> logger)
         {
             _context = context;
             _blobs = blobs;
             _sender = sender;
-            _smtp = smtp.Value;
             _logger = logger;
-
         }
 
         private Dictionary<string, string> FlowHeaders(string flow) => new()
@@ -50,13 +41,6 @@ namespace PTfinder.API.Controllers
             { "Feedback-ID", $"ptn-tx:{flow}:ptfindernow" }
         };
 
-
-
-        private string? SafeFrom(string? preferredFrom)
-        {
-            var chosen = string.IsNullOrWhiteSpace(preferredFrom) ? _smtp?.FromAddresses?.Default : preferredFrom;
-            return string.IsNullOrWhiteSpace(chosen) ? null : chosen;
-        }
         [HttpGet]
         public async Task<ActionResult<IEnumerable<object>>> GetCoaches()
         {
@@ -104,7 +88,6 @@ namespace PTfinder.API.Controllers
                     a.TimeSlot
                 }),
 
-
                 // Subscription Info
                 coach.SubscriptionTier,
                 coach.SubscriptionStatus,
@@ -113,9 +96,6 @@ namespace PTfinder.API.Controllers
                 coach.CurrentPeriodEndUtc,
                 coach.StripeCustomerId,
                 coach.StripeSubscriptionId,
-
-                // Freelancer or Company Coach
-       
 
                 // Flags
                 coach.EmailVerified,
@@ -126,9 +106,6 @@ namespace PTfinder.API.Controllers
 
             return Ok(response);
         }
-
-
-
 
         [HttpGet("{id}")]
         public async Task<IActionResult> GetCoach(int id)
@@ -150,7 +127,6 @@ namespace PTfinder.API.Controllers
                 if (coach == null)
                     return NotFound();
 
-                // build SAS URL for profile image (same style as Search)
                 var profileImageUrl = string.IsNullOrWhiteSpace(coach.ProfileImage)
                     ? null
                     : _blobs.GetReadUrl(coach.ProfileImage, TimeSpan.FromMinutes(60));
@@ -183,7 +159,6 @@ namespace PTfinder.API.Controllers
                         Name = coach.Speciality?.Name
                     },
 
-                    // ✅ full URL, ready for <img src="...">
                     ProfileImage = profileImageUrl,
 
                     Availabilities = coach.Availabilities.Select(a => new
@@ -222,15 +197,7 @@ namespace PTfinder.API.Controllers
                 return StatusCode(500, new { message = "Error in GetCoach", error = ex.Message });
             }
         }
-   
 
-
-
-
-
-        // ─────────────────────────────────────────────────────────────────────────
-        // GET: api/coaches/check-email?email=...
-        // ─────────────────────────────────────────────────────────────────────────
         [HttpGet("check-email")]
         public async Task<IActionResult> CheckEmailExists(string email)
         {
@@ -238,22 +205,15 @@ namespace PTfinder.API.Controllers
             return Ok(new { exists = coachExists });
         }
 
-        // ─────────────────────────────────────────────────────────────────────────
-        // GET: api/coaches/Search
-        // Accepts: Specialty / Speciality, Country, City, Area, Gender
-        // Optional: CategoryId, SpecialityId
-        // Example:
-        // /api/coaches/Search?Specialty=Personal+Training&Country=United+Arab+Emirates&City=Dubai&Area=Dubai+Marina&Gender=Male
-        // ─────────────────────────────────────────────────────────────────────────
         [HttpGet("Search")]
         public async Task<IActionResult> Search(
-         [FromQuery] int? CategoryId,
-         [FromQuery] int? SpecialityId,
-         [FromQuery] int? CountryId,
-         [FromQuery] int? CityId,
-         [FromQuery] int? AreaId,
-         [FromQuery] string? Gender,
-         [FromQuery] string? FullName)
+            [FromQuery] int? CategoryId,
+            [FromQuery] int? SpecialityId,
+            [FromQuery] int? CountryId,
+            [FromQuery] int? CityId,
+            [FromQuery] int? AreaId,
+            [FromQuery] string? Gender,
+            [FromQuery] string? FullName)
         {
             var nowUtc = DateTime.UtcNow;
 
@@ -296,9 +256,9 @@ namespace PTfinder.API.Controllers
 
             // 🔥 ONLY active subscriptions "till date"
             query = query.Where(c =>
-                c.IsActive &&                           // coach active
-                c.EmailVerified &&                      // email verified (optional but recommended)
-                c.SubscriptionTier > 0 &&               // has a paid/active tier
+                c.IsActive &&
+                c.EmailVerified &&
+                c.SubscriptionTier > 0 &&
                 (
                     (c.SubscriptionExpiresAtUtc.HasValue && c.SubscriptionExpiresAtUtc > nowUtc) ||
                     (c.CurrentPeriodEndUtc.HasValue && c.CurrentPeriodEndUtc > nowUtc)
@@ -328,7 +288,6 @@ namespace PTfinder.API.Controllers
                     CityName = c.City != null ? c.City.Name : null,
                     AreaName = c.Area != null ? c.Area.Name : null,
 
-                    // 👇 expose subscription info to frontend (if you want)
                     c.SubscriptionTier,
                     c.SubscriptionStatus,
                     c.SubscriptionExpiresAtUtc,
@@ -339,8 +298,6 @@ namespace PTfinder.API.Controllers
             return Ok(result);
         }
 
-        // GET /api/Coaches/Names?q=mo   -> suggestions that start with "mo"
-        // If q is missing/empty, returns all coach names (you may cap the count if large)
         [HttpGet("Names")]
         public async Task<IActionResult> Names([FromQuery] string? q, [FromQuery] int take = 1000)
         {
@@ -352,7 +309,6 @@ namespace PTfinder.API.Controllers
                 query = query.Where(c => c.FullName.ToLower().StartsWith(t));
             }
 
-            // Order for stable UX
             var result = await query
                 .OrderBy(c => c.FullName)
                 .Select(c => new { c.Id, c.FullName })
@@ -362,10 +318,6 @@ namespace PTfinder.API.Controllers
             return Ok(result);
         }
 
-
-        // ─────────────────────────────────────────────────────────────────────────
-        // POST: api/coaches (multipart/form-data)
-        // ─────────────────────────────────────────────────────────────────────────
         [HttpPost]
         public async Task<ActionResult<Coach>> PostCoach([FromForm] CoachCreateDto dto)
         {
@@ -383,11 +335,11 @@ namespace PTfinder.API.Controllers
             if (dto.PrivacyVersion.Length > 20)
                 return BadRequest(new { error = "Invalid Privacy version." });
 
-            // ✅ Capture IP (best practice: check proxy header first)
+            // ✅ Capture IP (proxy header first)
             string? ip = null;
             var xff = Request.Headers["X-Forwarded-For"].FirstOrDefault();
             if (!string.IsNullOrWhiteSpace(xff))
-                ip = xff.Split(',').FirstOrDefault()?.Trim(); // first IP is client
+                ip = xff.Split(',').FirstOrDefault()?.Trim();
             ip ??= HttpContext?.Connection?.RemoteIpAddress?.ToString();
 
             string? blobName = null;
@@ -401,9 +353,8 @@ namespace PTfinder.API.Controllers
             }
 
             var now = DateTime.UtcNow;
-            var end = now.AddMonths(12); // ✅ prelaunch free premium duration
+            var end = now.AddMonths(12);
 
-            // ✅ (Optional) get names for welcome email
             var categoryName = await _context.Categories
                 .Where(x => x.Id == dto.CategoryId)
                 .Select(x => x.Name)
@@ -414,14 +365,12 @@ namespace PTfinder.API.Controllers
                 .Select(x => x.Name)
                 .FirstOrDefaultAsync();
 
-            // ✅ fallback if not found
             categoryName = string.IsNullOrWhiteSpace(categoryName) ? "your selected category" : categoryName;
             specialityName = string.IsNullOrWhiteSpace(specialityName) ? "your selected speciality" : specialityName;
 
-            // ✅ Normalize consent language (en/ar)
             var consentLang = string.IsNullOrWhiteSpace(dto.ConsentLanguage)
                 ? null
-                : dto.ConsentLanguage.Trim().ToLower(); // "en" or "ar"
+                : dto.ConsentLanguage.Trim().ToLower();
 
             var coach = new Coach
             {
@@ -442,33 +391,27 @@ namespace PTfinder.API.Controllers
                 AreaId = dto.AreaId,
                 ProfileImage = blobName,
 
-                // ✅ Verified via OTP
                 EmailVerified = true,
                 IsActive = true,
 
-                // ✅ PRELAUNCH: Auto Premium
                 SubscriptionTier = SubscriptionTier.Standard,
                 SubscriptionStatus = SubscriptionStatus.Active,
                 SubscriptionStartedAtUtc = now,
                 SubscriptionExpiresAtUtc = end,
                 CurrentPeriodEndUtc = end,
 
-                // ✅ Stripe later
                 StripeCustomerId = null,
                 StripeSubscriptionId = null,
 
-                // ✅ Terms acceptance
                 TermsVersionAccepted = dto.TermsVersion.Trim(),
                 TermsAcceptedAtUtc = dto.TermsAcceptedAtUtc ?? now,
                 TermsAcceptedIp = ip,
 
-                // ✅ Privacy acceptance
                 PrivacyVersionAccepted = dto.PrivacyVersion.Trim(),
                 PrivacyAcceptedAtUtc = dto.PrivacyAcceptedAtUtc ?? now,
                 PrivacyAcceptedIp = ip,
                 PrivacyLanguage = consentLang,
 
-                // ✅ Client metadata
                 UserAgent = dto.UserAgent,
                 ClientTimeZone = dto.ClientTimeZone,
 
@@ -479,19 +422,15 @@ namespace PTfinder.API.Controllers
             _context.Coaches.Add(coach);
             await _context.SaveChangesAsync();
 
-
             // ✅ Welcome email
             var first = (coach.FullName ?? "there")
                 .Split(' ', StringSplitOptions.RemoveEmptyEntries)
                 .FirstOrDefault() ?? "there";
 
-            var subject = $"Welcome to PTfinderNow — Your Expert Profile Is Live 🚀";
+            var subject = "Welcome to PTfinderNow — Your Expert Profile Is Live 🚀";
             var premiumUntil = end.ToString("yyyy-MM-dd");
-
-            // ✅ Your Azure logo (update if storage account name differs)
             var logoUrl = "https://ptfindernow.com/images/PtFinderNow.png";
 
-            // ✅ HTML (Amazon-style)
             var html = EmailTemplates.WelcomeCoachHtml(
                 firstName: first,
                 premiumUntil: premiumUntil,
@@ -502,9 +441,8 @@ namespace PTfinder.API.Controllers
                 supportEmail: "info@ptfindernow.com"
             );
 
-            // ✅ Text fallback (your message stays)
             var text =
-        $@"Hi {first},
+$@"Hi {first},
 
 Welcome to PTfinderNow 👋  
 We’re excited to have you onboard.
@@ -559,27 +497,22 @@ Best regards,
             await _sender.SendAsync(
                 to: coach.Email,
                 subject: subject,
-                htmlBody: html,    // ✅ HTML now enabled
-                textBody: text,    // ✅ fallback still included
+                htmlBody: html,
+                textBody: text,
                 headers: FlowHeaders("welcome-coach-premium-prelaunch"),
                 tags: new[] { ("role", "coach"), ("flow", "welcome-coach-premium-prelaunch") },
-                fromOverride: SafeFrom(_smtp?.FromAddresses?.Welcome)
+                fromOverride: null
             );
 
             return CreatedAtAction(nameof(GetCoach), new { id = coach.Id }, coach);
         }
 
-        // ─────────────────────────────────────────────────────────────────────────
-        // PUT: api/coaches/{id}  (multipart/form-data)
-        // ─────────────────────────────────────────────────────────────────────────
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateCoach(int id, [FromForm] CoachUpdateDto dto)
         {
             var coach = await _context.Coaches.FindAsync(id);
             if (coach == null)
                 return NotFound();
-
-            // Only update fields that were actually sent
 
             if (!string.IsNullOrWhiteSpace(dto.FullName))
                 coach.FullName = dto.FullName;
@@ -590,7 +523,6 @@ Best regards,
             if (!string.IsNullOrWhiteSpace(dto.PhoneNumber))
                 coach.PhoneNumber = dto.PhoneNumber;
 
-            // Only change password if user sent something
             if (!string.IsNullOrWhiteSpace(dto.Password))
                 coach.Password = dto.Password; // TODO: hash
 
@@ -618,7 +550,6 @@ Best regards,
             if (dto.AreaId.HasValue && dto.AreaId.Value > 0)
                 coach.AreaId = dto.AreaId.Value;
 
-            // Profile image (optional)
             if (dto.ProfileImage != null && dto.ProfileImage.Length > 0)
             {
                 var newName = Guid.NewGuid() + Path.GetExtension(dto.ProfileImage.FileName);
@@ -626,7 +557,6 @@ Best regards,
                 await using var stream = dto.ProfileImage.OpenReadStream();
                 await _blobs.UploadAsync(newName, stream, dto.ProfileImage.ContentType);
 
-                // delete old blob if any
                 if (!string.IsNullOrWhiteSpace(coach.ProfileImage))
                     await _blobs.DeleteAsync(coach.ProfileImage);
 
@@ -637,9 +567,6 @@ Best regards,
             return NoContent();
         }
 
-        // ─────────────────────────────────────────────────────────────────────────
-        // DELETE: api/coaches/{id}
-        // ─────────────────────────────────────────────────────────────────────────
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteCoach(int id)
         {
@@ -647,11 +574,8 @@ Best regards,
             if (coach == null)
                 return NotFound();
 
-            // delete avatar blob if any
             if (!string.IsNullOrWhiteSpace(coach.ProfileImage))
-            {
                 await _blobs.DeleteAsync(coach.ProfileImage);
-            }
 
             _context.Coaches.Remove(coach);
             await _context.SaveChangesAsync();
@@ -660,4 +584,3 @@ Best regards,
         }
     }
 }
-
