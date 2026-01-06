@@ -18,7 +18,6 @@ using System.Text;
 using Hangfire;
 using Hangfire.SqlServer;
 
-
 var builder = WebApplication.CreateBuilder(args);
 
 // ------------ Load .env (optional for local) ------------
@@ -28,17 +27,18 @@ Env.Load();
 builder.Services.AddSignalR();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 
+// ------------ Connection string (fail fast if missing) ------------
+var cs = builder.Configuration.GetConnectionString("mycon")
+         ?? throw new InvalidOperationException("Missing connection string 'mycon'.");
 
-var stripeSecret =
-    builder.Configuration["Stripe:SecretKey"];
+// ------------ Stripe ------------
+var stripeSecret = builder.Configuration["Stripe:SecretKey"];
 if (string.IsNullOrWhiteSpace(stripeSecret))
 {
-    throw new InvalidOperationException(
-        "Stripe secret key is not configured. Set 'Stripe:SecretKey' ."
-    );
+    throw new InvalidOperationException("Stripe secret key is not configured. Set 'Stripe:SecretKey'.");
 }
-
 StripeConfiguration.ApiKey = stripeSecret;
+
 // ------------ Allowed Origins ------------
 var allowedOrigins = new[]
 {
@@ -56,13 +56,14 @@ builder.Services.AddCors(o => o.AddPolicy("web",
         .AllowCredentials()
 ));
 
+// ------------ Hangfire (USE mycon ALWAYS) ------------
 builder.Services.AddHangfire(config =>
 {
     config.SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
           .UseSimpleAssemblyNameTypeSerializer()
           .UseRecommendedSerializerSettings()
           .UseSqlServerStorage(
-              builder.Configuration.GetConnectionString("Hangfire"),
+              cs, // ✅ always use your main DB connection string
               new SqlServerStorageOptions
               {
                   CommandBatchMaxTimeout = TimeSpan.FromMinutes(5),
@@ -75,16 +76,13 @@ builder.Services.AddHangfire(config =>
 
 builder.Services.AddHangfireServer();
 
-
 // ------------ Stripe settings & config ------------
 builder.Services.Configure<StripeSettings>(builder.Configuration.GetSection("Stripe"));
-StripeConfiguration.ApiKey = builder.Configuration["Stripe:SecretKey"];
+// StripeConfiguration.ApiKey already set above
 
 // Register your BillingService using the alias (prevents ambiguity with Stripe.BillingService)
 builder.Services.AddScoped<AppBillingService>();
-
 builder.Services.AddScoped<ICoachSubscriptionService, CoachSubscriptionService>();
-
 
 // ------------ CORS policy (for general API calls) ------------
 builder.Services.AddCors(options =>
@@ -100,10 +98,6 @@ builder.Services.AddCors(options =>
         // Only add .AllowCredentials() if you actually use cookies in the browser
     });
 });
-
-// ------------ Connection string (fail fast if missing) ------------
-var cs = builder.Configuration.GetConnectionString("mycon")
-         ?? throw new InvalidOperationException("Missing connection string 'mycon'.");
 
 // ------------ DbContext (resilient SQL + sensible timeouts) ------------
 builder.Services.AddDbContextPool<AppDbContext>(options =>
@@ -174,11 +168,12 @@ builder.Services.Configure<SmtpSettings>(builder.Configuration.GetSection("Smtp"
 builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<SmtpSettings>>().Value);
 builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
 
+// ------------ Booking reminder emails ------------
+builder.Services.AddScoped<IBookingReminderEmails, BookingReminderEmails>();
+
 // ------------ Auth (JWT) ------------
 var jwtKey = builder.Configuration["Jwt:Key"]
     ?? throw new InvalidOperationException("Missing configuration: Jwt:Key");
-builder.Services.AddScoped<IBookingReminderEmails, BookingReminderEmails>();
-
 
 builder.Services.AddAuthentication(options =>
 {
@@ -284,7 +279,6 @@ app.Use(async (ctx, next) =>
 // ------------ Per-request timing + correlation id (set BEFORE next) ------------
 app.Use(async (ctx, next) =>
 {
-    // set early so it's always present and safe
     ctx.Response.Headers["x-correlation-id"] = ctx.TraceIdentifier;
 
     var sw = Stopwatch.StartNew();
@@ -294,7 +288,6 @@ app.Use(async (ctx, next) =>
         sw.Stop();
         app.Logger.LogInformation("HTTP {Method} {Path} => {Status} in {Ms} ms (cid {Cid})",
             ctx.Request.Method, ctx.Request.Path, ctx.Response.StatusCode, sw.ElapsedMilliseconds, ctx.TraceIdentifier);
-        // do not set headers here; response may have started
     }
 });
 
@@ -306,7 +299,7 @@ if (app.Environment.IsDevelopment())
 }
 else
 {
-    app.UseSwaggerUI(); // keep UI in prod if you want; can lock behind auth/gateway
+    app.UseSwaggerUI();
 }
 
 // ------------ SAFE auto-migrate ------------
@@ -315,7 +308,7 @@ using (var scope = app.Services.CreateScope())
     try
     {
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        db.Database.SetCommandTimeout(120); // only for migration run
+        db.Database.SetCommandTimeout(120);
         db.Database.Migrate();
         app.Logger.LogInformation("Migrations applied.");
     }
@@ -341,10 +334,11 @@ app.MapGet("/debug/config", (IConfiguration cfg) =>
 // Hubs
 app.MapHub<NotifyHub>("/hubs/notify");
 
-// ------------ Map controllers ------------
-app.MapControllers();
+// ✅ Hangfire dashboard (after middleware, before endpoints is fine here too)
 app.UseHangfireDashboard("/hangfire");
 
+// ------------ Map controllers ------------
+app.MapControllers();
 
 // ------------ Warm the DB once after startup ------------
 app.Lifetime.ApplicationStarted.Register(() =>
@@ -366,3 +360,4 @@ app.Lifetime.ApplicationStarted.Register(() =>
 });
 
 app.Run();
+
