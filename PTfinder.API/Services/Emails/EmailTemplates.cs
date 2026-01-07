@@ -16,6 +16,10 @@ namespace PTfinder.API.Services.Emails
             string supportEmail = "info@ptfindernow.com",
             string webBaseUrl = "https://ptfindernow.com")
         {
+            // ✅ Force logo everywhere (fallback)
+            if (string.IsNullOrWhiteSpace(logoUrl))
+                logoUrl = "https://ptfindernow.com/images/PtFinderNow.png";
+
             // NOTE: Use max-width + width:100% to show logo on mobile
             return $@"
 <!doctype html>
@@ -102,7 +106,7 @@ namespace PTfinder.API.Services.Emails
 </div>";
         }
 
-        // ✅ Welcome Coach Email (KEEP)
+        // ✅ Welcome Coach Email (UPDATED: add Tips + Thanks Gift note)
         public static string WelcomeCoachHtml(
             string firstName,
             string premiumUntil,
@@ -153,6 +157,12 @@ namespace PTfinder.API.Services.Emails
   2) Add your availability for this week<br/>
   3) Add 2–3 reviews from previous clients<br/>
   4) Share your PTfinderNow profile link on WhatsApp or Instagram
+</div>
+
+<div style=""margin-top:16px;font-size:14px;font-weight:900;color:#0f172a;"">🎁 Tips & Thanks Gift (when Stripe is approved)</div>
+<div style=""margin-top:8px;font-size:13px;line-height:1.9;color:#475569"">
+  Once your <strong>Stripe</strong> account is approved and connected, clients will be able to send you <strong>Tips / Thanks Gifts</strong> directly through PTfinderNow.<br/>
+  This is optional, but it’s a great way to earn extra rewards from happy clients.
 </div>
 
 {Button(dashboardUrl, "Go to your dashboard →")}
