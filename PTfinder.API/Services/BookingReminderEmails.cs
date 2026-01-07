@@ -59,7 +59,7 @@ public sealed class BookingReminderEmails : IBookingReminderEmails
             whenText: whenText,
             timeSlot: booking.TimeSlot ?? "",
             hoursBefore: hoursBefore,
-            logoUrl: LogoUrl
+    logoUrl: "https://ptfindernow.com/images/PtFinderNow.png"
         );
 
         var titleText = hoursBefore >= 24
