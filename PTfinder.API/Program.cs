@@ -361,8 +361,6 @@ app.Lifetime.ApplicationStarted.Register(() =>
     });
 });
 
-app.UseHangfireServer();
-app.UseHangfireDashboard();
 
 
 app.Run();
