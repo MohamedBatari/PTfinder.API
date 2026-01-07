@@ -107,7 +107,7 @@ namespace PTfinder.API.Controllers
                 whenText: whenText,
                 timeSlot: booking.TimeSlot ?? "",
                 manageUrl: coachManageUrl,
-                logoUrl: LogoUrl
+    logoUrl: "https://ptfindernow.com/images/PtFinderNow.png"
             );
 
             var coachText =
@@ -138,7 +138,7 @@ Open in dashboard:
                 coachName: coach.FullName ?? "Coach",
                 whenText: whenText,
                 timeSlot: booking.TimeSlot ?? "",
-                logoUrl: LogoUrl
+    logoUrl: "https://ptfindernow.com/images/PtFinderNow.png"
             );
 
             var studentText =
@@ -253,7 +253,7 @@ You'll receive an email when the coach confirms or declines.
                     coachName: coach.FullName ?? "Coach",
                     whenText: whenText,
                     timeSlot: booking.TimeSlot ?? "",
-                    logoUrl: LogoUrl
+    logoUrl: "https://ptfindernow.com/images/PtFinderNow.png"
                 );
 
                 var text =
@@ -291,7 +291,7 @@ Time Slot: {booking.TimeSlot}
                     whenText: whenText,
                     timeSlot: booking.TimeSlot ?? "",
                     searchUrl: searchUrl,
-                    logoUrl: LogoUrl
+    logoUrl: "https://ptfindernow.com/images/PtFinderNow.png"
                 );
 
                 var text =

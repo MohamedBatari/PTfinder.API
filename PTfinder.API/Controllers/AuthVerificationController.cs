@@ -136,7 +136,7 @@ public class AuthVerificationController : ControllerBase
             firstName: "there",
             code: code,
             expiresMinutes: minutes,
-            logoUrl: EmailLogoUrl,
+            logoUrl: "https://ptfindernow.com/images/PtFinderNow.png", 
             supportEmail: "info@ptfindernow.com",
             webBaseUrl: WebBaseUrl
         );
