@@ -171,6 +171,8 @@ builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
 // ------------ Booking reminder emails ------------
 builder.Services.AddScoped<IBookingReminderEmails, BookingReminderEmails>();
 
+
+
 // ------------ Auth (JWT) ------------
 var jwtKey = builder.Configuration["Jwt:Key"]
     ?? throw new InvalidOperationException("Missing configuration: Jwt:Key");

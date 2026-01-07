@@ -9,6 +9,9 @@ using PTfinder.API.Services;
 using PTfinder.API.Services.Emails;
 using Hangfire;
 using System.Security.Claims;
+using System.Security.Claims;
+using System.IdentityModel.Tokens.Jwt;
+
 
 namespace PTfinder.API.Controllers
 {
@@ -44,11 +47,14 @@ namespace PTfinder.API.Controllers
         {
             var v =
                 User.FindFirst("coachId")?.Value ??
+                User.FindFirst("CoachId")?.Value ??                      // ✅ support old token
                 User.FindFirst(ClaimTypes.NameIdentifier)?.Value ??
+                User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value ??
                 User.FindFirst("sub")?.Value;
 
             return int.TryParse(v, out var id) ? id : null;
         }
+
 
         // ✅ If BookingDate is saved as Dubai local (Unspecified), convert correctly to UTC for Hangfire
         private static DateTime DubaiLocalToUtc(DateTime bookingDate)
