@@ -393,5 +393,55 @@ namespace PTfinder.API.Services.Emails
                 bodyHtml: body
             );
         }
-    }
+
+        // ✅ Review request (Student → leave review on coach profile)
+        public static string ReviewRequestStudentHtml(
+            string studentName,
+            string coachName,
+            string coachProfileUrl,
+            string logoUrl,
+            string supportEmail = "info@ptfindernow.com",
+            string webBaseUrl = "https://ptfindernow.com")
+        {
+            if (string.IsNullOrWhiteSpace(coachProfileUrl))
+                coachProfileUrl = webBaseUrl.TrimEnd('/') + "/";
+
+            var body = $@"
+<div style=""font-size:16px;font-weight:900;margin-bottom:10px;"">
+  How was your session? ⭐
+</div>
+
+<div style=""font-size:13px;line-height:1.75;color:#475569;"">
+  Hi {E(studentName)},<br/>
+  We hope your session with <strong>{E(coachName)}</strong> went great.<br/>
+  Would you take <strong>30 seconds</strong> to leave a quick review? Your feedback helps others choose the right expert.
+</div>
+
+<div style=""margin:16px 0 10px 0;background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;padding:12px 12px;"">
+  <div style=""font-size:13px;font-weight:900;color:#0f172a;margin-bottom:6px;"">Why reviews matter</div>
+  <div style=""font-size:12px;line-height:1.8;color:#64748b;"">
+    • Helps other clients trust this expert<br/>
+    • Supports the coach to grow on PTfinderNow<br/>
+    • Improves overall quality of the platform
+  </div>
+</div>
+
+{Button(coachProfileUrl, "Leave a review →")}
+
+<div style=""margin-top:14px;font-size:12px;line-height:1.7;color:#64748b;text-align:center;"">
+  Thank you for helping the PTfinderNow community.
+</div>";
+
+            return Wrap(
+                title: "Please leave a review",
+                logoUrl: logoUrl,
+                badgeText: "Review request",
+                bodyHtml: body,
+                supportEmail: supportEmail,
+                webBaseUrl: webBaseUrl
+            );
+        }
+    
+
+}
 }
