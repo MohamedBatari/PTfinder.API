@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PTfinder.API.DATA;
 using PTfinder.API.DATA.Modules;
@@ -7,6 +8,7 @@ using PTfinder.API.Enums;
 using PTfinder.API.Services;
 using PTfinder.API.Services.Emails;
 using Hangfire;
+using System.Security.Claims;
 
 namespace PTfinder.API.Controllers
 {
@@ -35,7 +37,18 @@ namespace PTfinder.API.Controllers
         }
 
         private string WebBaseUrl => _cfg["Web:BaseUrl"] ?? "https://ptfindernow.com";
-        private string LogoUrl => _cfg["Branding:LogoUrl"] ?? $"{WebBaseUrl}/logo.png";
+        private string LogoUrl => _cfg["Branding:LogoUrl"] ?? $"{WebBaseUrl.TrimEnd('/')}/images/PtFinderNow.png";
+
+        // ✅ read coachId from JWT (supports both "coachId" and NameIdentifier)
+        private int? GetCoachId()
+        {
+            var v =
+                User.FindFirst("coachId")?.Value ??
+                User.FindFirst(ClaimTypes.NameIdentifier)?.Value ??
+                User.FindFirst("sub")?.Value;
+
+            return int.TryParse(v, out var id) ? id : null;
+        }
 
         // ✅ If BookingDate is saved as Dubai local (Unspecified), convert correctly to UTC for Hangfire
         private static DateTime DubaiLocalToUtc(DateTime bookingDate)
@@ -47,7 +60,6 @@ namespace PTfinder.API.Controllers
             if (bookingDate.Kind == DateTimeKind.Unspecified)
                 return TimeZoneInfo.ConvertTimeToUtc(bookingDate, tz);
 
-            // Local -> UTC
             return bookingDate.ToUniversalTime();
         }
 
@@ -55,7 +67,7 @@ namespace PTfinder.API.Controllers
             $"{bookingDate:yyyy-MM-dd HH:mm} (Asia/Dubai)";
 
         // ---------------------------
-        // POST: Create booking
+        // POST: Create booking (PUBLIC - clients can book without login)
         // ---------------------------
         [HttpPost]
         public async Task<ActionResult<Booking>> CreateBooking(BookingCreateDto dto, CancellationToken ct)
@@ -82,23 +94,20 @@ namespace PTfinder.API.Controllers
             await _context.SaveChangesAsync(ct);
 
             // Notification → Coach
-            var serviceName = "session";
-            var timezone = "Asia/Dubai";
-
             await _notifications.NotifyCoachBookingRequest(
                 coachId: booking.CoachId,
                 bookingId: booking.Id,
                 clientName: booking.StudentName,
-                serviceName: serviceName,
+                serviceName: "session",
                 startsAtLocal: booking.BookingDate,
-                timezone: timezone,
+                timezone: "Asia/Dubai",
                 ct: ct
             );
 
             var whenText = DubaiWhenText(booking.BookingDate);
             var coachManageUrl = $"{WebBaseUrl}/dashboard/bookings/{booking.Id}";
 
-            // Email → Coach (HAS manage link)
+            // Email → Coach
             var coachHtml = EmailTemplates.BookingRequestCoachHtml(
                 coachName: coach.FullName ?? "Coach",
                 studentName: booking.StudentName ?? "",
@@ -107,7 +116,7 @@ namespace PTfinder.API.Controllers
                 whenText: whenText,
                 timeSlot: booking.TimeSlot ?? "",
                 manageUrl: coachManageUrl,
-    logoUrl: "https://ptfindernow.com/images/PtFinderNow.png"
+                logoUrl: "https://ptfindernow.com/images/PtFinderNow.png"
             );
 
             var coachText =
@@ -126,19 +135,19 @@ Open in dashboard:
 
             await _sender.SendAsync(
                 to: coach.Email,
-                subject: $"New booking request — {serviceName} from {booking.StudentName}",
+                subject: $"New booking request — session from {booking.StudentName}",
                 htmlBody: coachHtml,
                 textBody: coachText,
                 ct: ct
             );
 
-            // Email → Student (NO manage link)
+            // Email → Student
             var studentHtml = EmailTemplates.BookingRequestStudentHtml(
                 studentName: booking.StudentName ?? "Client",
                 coachName: coach.FullName ?? "Coach",
                 whenText: whenText,
                 timeSlot: booking.TimeSlot ?? "",
-    logoUrl: "https://ptfindernow.com/images/PtFinderNow.png"
+                logoUrl: "https://ptfindernow.com/images/PtFinderNow.png"
             );
 
             var studentText =
@@ -159,18 +168,24 @@ You'll receive an email when the coach confirms or declines.
                 ct: ct
             );
 
+            // You can keep this, but note: it returns booking object publicly.
+            // It's OK, but if you want, return only booking.Id instead.
             return CreatedAtAction(nameof(GetBooking), new { id = booking.Id }, booking);
         }
 
         // ---------------------------
-        // GET: booking by id
+        // GET: booking by id (SECURE: only owner coach)
         // ---------------------------
+        [Authorize]
         [HttpGet("{id}")]
         public async Task<ActionResult<Booking>> GetBooking(int id, CancellationToken ct)
         {
+            var coachId = GetCoachId();
+            if (coachId == null) return Unauthorized();
+
             var booking = await _context.Bookings
                 .Include(b => b.Coach)
-                .FirstOrDefaultAsync(b => b.Id == id, ct);
+                .FirstOrDefaultAsync(b => b.Id == id && b.CoachId == coachId.Value, ct);
 
             if (booking == null)
                 return NotFound();
@@ -179,31 +194,44 @@ You'll receive an email when the coach confirms or declines.
         }
 
         // ---------------------------
-        // GET: bookings by coach
+        // GET: bookings by coach (SECURE)
+        // IMPORTANT: do NOT trust coachId from URL.
+        // Return only the logged-in coach bookings.
         // ---------------------------
+        [Authorize]
         [HttpGet("coach/{coachId}")]
         public async Task<IActionResult> GetBookingsByCoachId(int coachId, CancellationToken ct)
         {
+            var tokenCoachId = GetCoachId();
+            if (tokenCoachId == null) return Unauthorized();
+
+            // ✅ block reading other coach bookings
+            if (coachId != tokenCoachId.Value) return Forbid();
+
             var bookings = await _context.Bookings
-                .Where(b => b.CoachId == coachId)
+                .Where(b => b.CoachId == tokenCoachId.Value)
                 .OrderByDescending(b => b.Id)
                 .ToListAsync(ct);
 
-            if (bookings == null || !bookings.Any())
+            if (bookings.Count == 0)
                 return NotFound("No bookings found for this coach.");
 
             return Ok(bookings);
         }
 
         // ---------------------------
-        // PUT: update status
+        // PUT: update status (SECURE: only owner coach)
         // ---------------------------
+        [Authorize]
         [HttpPut("{id}/status")]
         public async Task<IActionResult> UpdateBookingStatus(int id, [FromBody] BookingStatusDto statusDto, CancellationToken ct)
         {
+            var coachId = GetCoachId();
+            if (coachId == null) return Unauthorized();
+
             var booking = await _context.Bookings
                 .Include(b => b.Coach)
-                .FirstOrDefaultAsync(b => b.Id == id, ct);
+                .FirstOrDefaultAsync(b => b.Id == id && b.CoachId == coachId.Value, ct);
 
             if (booking == null)
                 return NotFound($"Booking with ID {id} not found.");
@@ -214,7 +242,6 @@ You'll receive an email when the coach confirms or declines.
             var coach = booking.Coach!;
             var whenText = DubaiWhenText(booking.BookingDate);
 
-            // ✅ Schedule reminders ONLY when accepted
             if (statusDto.Status == BookingStatus.Accepted)
             {
                 var startUtc = DubaiLocalToUtc(booking.BookingDate);
@@ -237,7 +264,6 @@ You'll receive an email when the coach confirms or declines.
                     );
                 }
 
-                // Notify coach
                 await _notifications.NotifyCoachBookingConfirmed(
                     coachId: booking.CoachId,
                     bookingId: booking.Id,
@@ -247,13 +273,12 @@ You'll receive an email when the coach confirms or declines.
                     timezone: "Asia/Dubai",
                     ct: ct);
 
-                // Email student (confirmed)
                 var html = EmailTemplates.BookingAcceptedStudentHtml(
                     studentName: booking.StudentName ?? "Client",
                     coachName: coach.FullName ?? "Coach",
                     whenText: whenText,
                     timeSlot: booking.TimeSlot ?? "",
-    logoUrl: "https://ptfindernow.com/images/PtFinderNow.png"
+                    logoUrl: "https://ptfindernow.com/images/PtFinderNow.png"
                 );
 
                 var text =
@@ -291,7 +316,7 @@ Time Slot: {booking.TimeSlot}
                     whenText: whenText,
                     timeSlot: booking.TimeSlot ?? "",
                     searchUrl: searchUrl,
-    logoUrl: "https://ptfindernow.com/images/PtFinderNow.png"
+                    logoUrl: "https://ptfindernow.com/images/PtFinderNow.png"
                 );
 
                 var text =
@@ -318,12 +343,18 @@ Search for another coach:
         }
 
         // ---------------------------
-        // DELETE: booking
+        // DELETE: booking (SECURE: only owner coach)
         // ---------------------------
+        [Authorize]
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteBooking(int id, CancellationToken ct)
         {
-            var booking = await _context.Bookings.FindAsync(new object?[] { id }, ct);
+            var coachId = GetCoachId();
+            if (coachId == null) return Unauthorized();
+
+            var booking = await _context.Bookings
+                .FirstOrDefaultAsync(b => b.Id == id && b.CoachId == coachId.Value, ct);
+
             if (booking == null)
                 return NotFound();
 
@@ -334,3 +365,4 @@ Search for another coach:
         }
     }
 }
+
