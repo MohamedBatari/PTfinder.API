@@ -28,8 +28,7 @@ public sealed class BookingReminderEmails : IBookingReminderEmails
     private string WebBaseUrl => _cfg["Web:BaseUrl"] ?? "https://ptfindernow.com";
 
     // ✅ Optional: keep for future, but you already pass logoUrl explicitly
-    private string LogoUrl =>
-        _cfg["Branding:LogoUrl"] ?? $"{WebBaseUrl.TrimEnd('/')}/images/PtFinderNow.png";
+
 
     public async Task SendStudentReminder(int bookingId, int hoursBefore, CancellationToken ct = default)
     {

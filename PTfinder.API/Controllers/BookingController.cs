@@ -262,6 +262,7 @@ You'll receive an email when the coach confirms or declines.
                 }
 
                 var run2 = startUtc.AddHours(-2);
+
                 if (run2 > DateTime.UtcNow.AddMinutes(1))
                 {
                     _jobs.Schedule<IBookingReminderEmails>(
@@ -269,6 +270,18 @@ You'll receive an email when the coach confirms or declines.
                         run2
                     );
                 }
+                else
+                {
+                    // ✅ If we're inside the 2-hour window (or it already passed), still notify
+                    // as long as session hasn't started yet.
+                    if (startUtc > DateTime.UtcNow.AddMinutes(5))
+                    {
+                        _jobs.Enqueue<IBookingReminderEmails>(
+                            x => x.SendStudentReminder(booking.Id, 2, CancellationToken.None)
+                        );
+                    }
+                }
+
 
                 await _notifications.NotifyCoachBookingConfirmed(
                     coachId: booking.CoachId,
