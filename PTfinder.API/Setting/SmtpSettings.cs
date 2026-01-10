@@ -11,7 +11,7 @@ namespace PTfinder.API.Settings
 
         // ✅ One sender only
         public string From { get; set; } = "PTfinderNow <noreply@gmail.com>";
-        public string? Bcc { get; set; } // e.g. "noreply@ptfindernow.com"
+        public string? Bcc { get; set; } 
 
     }
 }
