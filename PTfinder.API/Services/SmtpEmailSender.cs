@@ -29,6 +29,7 @@ public sealed class SmtpEmailSender : IEmailSender
         var m = Regex.Match(s, @"<\s*([^>\s]+@[^>\s]+)\s*>");
         if (m.Success) return m.Groups[1].Value;
 
+        // Else assume it's raw email
         return s;
     }
 
@@ -39,15 +40,18 @@ public sealed class SmtpEmailSender : IEmailSender
 
         try
         {
+            // Keep display name if provided: "PTfinderNow <noreply@...>"
             if (raw.Contains("<") && raw.Contains(">"))
                 return new MailAddress(raw.Trim());
 
             var email = ExtractEmail(raw);
-            if (!string.IsNullOrWhiteSpace(email) &&
-                MailAddress.TryCreate(email, out var addr))
+            if (!string.IsNullOrWhiteSpace(email) && MailAddress.TryCreate(email, out var addr))
                 return addr;
         }
-        catch { }
+        catch
+        {
+            // ignore and throw below
+        }
 
         throw new FormatException($"Invalid {label} email: '{raw}'");
     }
@@ -72,13 +76,9 @@ public sealed class SmtpEmailSender : IEmailSender
         return RequireAddress(_cfg.Bcc, "Bcc");
     }
 
-    private static bool HasTrackTag(IEnumerable<(string Name, string Value)>? tags)
-        => tags?.Any(t =>
-            string.Equals(t.Name, "Track", StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(t.Value, "true", StringComparison.OrdinalIgnoreCase)
-        ) == true;
-
     /* ----------------------- Send ----------------------- */
+
+    // MUST match IEmailSender signature (order matters)
     public async Task SendAsync(
         string to,
         string subject,
@@ -96,6 +96,11 @@ public sealed class SmtpEmailSender : IEmailSender
         var replyTo = ResolveReplyTo();
         var bccAddr = ResolveBcc();
 
+        // ✅ Debug: confirm Azure config is loading Bcc
+        _log.LogWarning("DEBUG SMTP BCC: cfg='{CfgBcc}' resolved='{ResolvedBcc}'",
+            _cfg.Bcc ?? "<null>",
+            bccAddr?.Address ?? "<null>");
+
         using var msg = new MailMessage
         {
             From = from,
@@ -110,42 +115,44 @@ public sealed class SmtpEmailSender : IEmailSender
         if (replyTo != null)
             msg.ReplyToList.Add(replyTo);
 
+        // ✅ Always BCC (if configured)
         if (bccAddr != null)
             msg.Bcc.Add(bccAddr);
 
-
-        // Plain text
+        // Plain text first
         if (!string.IsNullOrWhiteSpace(textBody))
+        {
             msg.AlternateViews.Add(
-                AlternateView.CreateAlternateViewFromString(
-                    textBody, Encoding.UTF8, "text/plain"));
+                AlternateView.CreateAlternateViewFromString(textBody, Encoding.UTF8, "text/plain"));
+        }
 
-        // HTML
+        // HTML second
         if (!string.IsNullOrWhiteSpace(htmlBody))
+        {
             msg.AlternateViews.Add(
-                AlternateView.CreateAlternateViewFromString(
-                    htmlBody, Encoding.UTF8, "text/html"));
+                AlternateView.CreateAlternateViewFromString(htmlBody, Encoding.UTF8, "text/html"));
+        }
 
-        // Headers
         if (headers != null)
+        {
             foreach (var kv in headers)
                 if (!string.IsNullOrWhiteSpace(kv.Key) && kv.Value != null)
                     msg.Headers[kv.Key] = kv.Value;
+        }
 
-        // Tags
         if (tags != null)
+        {
             foreach (var (Name, Value) in tags)
                 if (!string.IsNullOrWhiteSpace(Name) && Value != null)
                     msg.Headers[$"X-PTN-{Name}"] = Value;
+        }
 
-        // Attachments
         if (attachments != null)
         {
             foreach (var (FileName, ContentType, Bytes) in attachments)
             {
                 var ms = new MemoryStream(Bytes);
-                msg.Attachments.Add(
-                    new Attachment(ms, ContentType) { Name = FileName });
+                msg.Attachments.Add(new Attachment(ms, ContentType) { Name = FileName });
             }
         }
 
@@ -173,7 +180,8 @@ public sealed class SmtpEmailSender : IEmailSender
         catch (SmtpException ex)
         {
             _log.LogError(ex, "SMTP send failed");
-            throw new InvalidOperationException(
-                $"SMTP send failed: {ex.StatusCode} - {ex.Message}", ex);
-        } }
+            throw new InvalidOperationException($"SMTP send failed: {ex.StatusCode} - {ex.Message}", ex);
+        }
     }
+}
+
