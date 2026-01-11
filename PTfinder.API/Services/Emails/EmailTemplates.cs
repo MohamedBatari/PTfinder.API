@@ -271,11 +271,11 @@ namespace PTfinder.API.Services.Emails
 <div style=""font-size:13px;line-height:1.7;color:#475569;"">
   Hi {E(studentName)},<br/>
   We sent your booking request to <strong>{E(coachName)}</strong>.
-  You will receive an email once the coach confirms or declines.
+  You will receive an email once confirms or declines.
 </div>
 
 <table role=""presentation"" width=""100%"" cellpadding=""0"" cellspacing=""0"" style=""border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;margin-top:12px;"">
-  {InfoRow("Coach", coachName)}
+  {InfoRow("Name", coachName)}
   {InfoRow("Requested time", whenText)}
   {InfoRow("Time Slot", timeSlot)}
 </table>
@@ -309,7 +309,7 @@ namespace PTfinder.API.Services.Emails
 </div>
 
 <table role=""presentation"" width=""100%"" cellpadding=""0"" cellspacing=""0"" style=""border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;margin-top:12px;"">
-  {InfoRow("Coach", coachName)}
+  {InfoRow("Name", coachName)}
   {InfoRow("Date/Time", whenText)}
   {InfoRow("Time Slot", timeSlot)}
 </table>
@@ -344,7 +344,7 @@ namespace PTfinder.API.Services.Emails
 </div>
 
 <table role=""presentation"" width=""100%"" cellpadding=""0"" cellspacing=""0"" style=""border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;margin-top:12px;"">
-  {InfoRow("Coach", coachName)}
+  {InfoRow("Name", coachName)}
   {InfoRow("Requested time", whenText)}
   {InfoRow("Time Slot", timeSlot)}
 </table>
@@ -381,7 +381,7 @@ namespace PTfinder.API.Services.Emails
 </div>
 
 <table role=""presentation"" width=""100%"" cellpadding=""0"" cellspacing=""0"" style=""border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;margin-top:12px;"">
-  {InfoRow("Coach", coachName)}
+  {InfoRow("Name", coachName)}
   {InfoRow("Date/Time", whenText)}
   {InfoRow("Time Slot", timeSlot)}
 </table>";

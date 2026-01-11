@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using PTfinder.API.DATA;
+using PTfinder.API.Enums;
 using PTfinder.API.Services;
 
 namespace PTfinder.API.Services.Emails;
@@ -9,6 +10,8 @@ public interface IBookingEmailFlows
     Task SendBookingCreatedEmails(int bookingId, CancellationToken ct = default);
     Task SendBookingAcceptedEmail(int bookingId, CancellationToken ct = default);
     Task SendBookingDeclinedEmail(int bookingId, CancellationToken ct = default);
+    Task SendStudentReviewRequest(int bookingId, CancellationToken ct = default);
+
 }
 
 public sealed class BookingEmailFlows : IBookingEmailFlows
@@ -180,4 +183,48 @@ Search for another coach:
             ct: ct
         );
     }
+
+    public async Task SendStudentReviewRequest(int bookingId, CancellationToken ct = default)
+    {
+        var booking = await _db.Bookings
+            .AsNoTracking()
+            .FirstOrDefaultAsync(b => b.Id == bookingId, ct);
+
+        if (booking == null) return;
+
+        var coach = await _db.Coaches
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == booking.CoachId, ct);
+
+        if (coach == null) return;
+
+        // ✅ only if accepted (optional but recommended)
+        if (booking.Status != BookingStatus.Accepted) return;
+
+        var coachProfileUrl = $"{WebBaseUrl.TrimEnd('/')}/coaches/{coach.Id}";
+
+        var html = EmailTemplates.ReviewRequestStudentHtml(
+            studentName: booking.StudentName ?? "Client",
+            coachName: coach.FullName ?? "Coach",
+            coachProfileUrl: coachProfileUrl,
+            logoUrl: LogoUrl
+        );
+
+        var text =
+    $@"How was your session?
+
+Please leave a quick review for {coach.FullName}:
+{coachProfileUrl}
+
+— PTfinderNow";
+
+        await _sender.SendAsync(
+            to: booking.StudentEmail,
+            subject: $"How was your session with {coach.FullName}? Leave a review ⭐",
+            htmlBody: html,
+            textBody: text,
+            ct: ct
+        );
+    }
+
 }

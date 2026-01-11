@@ -21,20 +21,17 @@ namespace PTfinder.API.Controllers
         private readonly INotificationService _notifications;
         private readonly IConfiguration _cfg;
         private readonly IBackgroundJobClient _jobs;
-        private readonly IBookingEmailFlows _bookingEmails; // ✅ NEW
 
         public BookingController(
             AppDbContext context,
             INotificationService notifications,
             IConfiguration cfg,
-            IBackgroundJobClient jobs,
-            IBookingEmailFlows bookingEmails) // ✅ NEW
+            IBackgroundJobClient jobs)
         {
             _context = context;
             _notifications = notifications;
             _cfg = cfg;
             _jobs = jobs;
-            _bookingEmails = bookingEmails;
         }
 
         private string WebBaseUrl => _cfg["Web:BaseUrl"] ?? "https://ptfindernow.com";
@@ -181,14 +178,13 @@ namespace PTfinder.API.Controllers
             booking.Status = statusDto.Status;
             await _context.SaveChangesAsync(ct);
 
-            var coach = booking.Coach!;
-            var whenText = DubaiWhenText(booking.BookingDate);
+            var startUtc = DubaiLocalToUtc(booking.BookingDate);
 
             if (statusDto.Status == BookingStatus.Accepted)
             {
-                var startUtc = DubaiLocalToUtc(booking.BookingDate);
-
-                // reminders
+                // ----------------
+                // Reminders (24h / 2h before)
+                // ----------------
                 var run24 = startUtc.AddHours(-24);
                 if (run24 > DateTime.UtcNow.AddMinutes(1))
                 {
@@ -208,12 +204,31 @@ namespace PTfinder.API.Controllers
                 }
                 else
                 {
+                    // If inside the 2-hour window, still notify if session not started
                     if (startUtc > DateTime.UtcNow.AddMinutes(5))
                     {
                         _jobs.Enqueue<IBookingReminderEmails>(
                             x => x.SendStudentReminder(booking.Id, 2, CancellationToken.None)
                         );
                     }
+                }
+
+                // ----------------
+                // ✅ Review request (3 hours AFTER session start)
+                // ----------------
+                var reviewAt = startUtc.AddHours(3);
+                if (reviewAt > DateTime.UtcNow.AddMinutes(1))
+                {
+                    _jobs.Schedule<IBookingReminderEmails>(
+                        x => x.SendStudentReviewRequest(booking.Id, CancellationToken.None),
+                        reviewAt
+                    );
+                }
+                else
+                {
+                    _jobs.Enqueue<IBookingReminderEmails>(
+                        x => x.SendStudentReviewRequest(booking.Id, CancellationToken.None)
+                    );
                 }
 
                 // ✅ Notification → Coach
