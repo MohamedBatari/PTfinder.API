@@ -1,4 +1,6 @@
 ﻿using DotNetEnv;
+using Hangfire;
+using Hangfire.SqlServer;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
@@ -10,13 +12,12 @@ using Microsoft.OpenApi.Models;
 using PTfinder.API.DATA;
 using PTfinder.API.Hubs;
 using PTfinder.API.Services;
+using PTfinder.API.Services.Emails;
 using PTfinder.API.Settings;
-using AppBillingService = PTfinder.API.Services.BillingService; // alias to avoid Stripe.BillingService collision
 using Stripe;
 using System.Diagnostics;
 using System.Text;
-using Hangfire;
-using Hangfire.SqlServer;
+using AppBillingService = PTfinder.API.Services.BillingService; // alias to avoid Stripe.BillingService collision
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -170,6 +171,11 @@ builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
 
 // ------------ Booking reminder emails ------------
 builder.Services.AddScoped<IBookingReminderEmails, BookingReminderEmails>();
+
+
+
+builder.Services.AddScoped<IBookingEmailFlows, BookingEmailFlows>();
+
 
 
 

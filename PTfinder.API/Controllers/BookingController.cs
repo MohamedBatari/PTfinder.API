@@ -1,17 +1,15 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using Hangfire;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PTfinder.API.DATA;
-using PTfinder.API.DATA.Modules;
 using PTfinder.API.DATA.DTO;
+using PTfinder.API.DATA.Modules;
 using PTfinder.API.Enums;
 using PTfinder.API.Services;
 using PTfinder.API.Services.Emails;
-using Hangfire;
-using System.Security.Claims;
-using System.Security.Claims;
-using System.IdentityModel.Tokens.Jwt;
-
 
 namespace PTfinder.API.Controllers
 {
@@ -21,22 +19,22 @@ namespace PTfinder.API.Controllers
     {
         private readonly AppDbContext _context;
         private readonly INotificationService _notifications;
-        private readonly IEmailSender _sender;
         private readonly IConfiguration _cfg;
         private readonly IBackgroundJobClient _jobs;
+        private readonly IBookingEmailFlows _bookingEmails; // ✅ NEW
 
         public BookingController(
             AppDbContext context,
             INotificationService notifications,
-            IEmailSender sender,
             IConfiguration cfg,
-            IBackgroundJobClient jobs)
+            IBackgroundJobClient jobs,
+            IBookingEmailFlows bookingEmails) // ✅ NEW
         {
             _context = context;
             _notifications = notifications;
-            _sender = sender;
             _cfg = cfg;
             _jobs = jobs;
+            _bookingEmails = bookingEmails;
         }
 
         private string WebBaseUrl => _cfg["Web:BaseUrl"] ?? "https://ptfindernow.com";
@@ -47,14 +45,13 @@ namespace PTfinder.API.Controllers
         {
             var v =
                 User.FindFirst("coachId")?.Value ??
-                User.FindFirst("CoachId")?.Value ??                      // ✅ support old token
+                User.FindFirst("CoachId")?.Value ?? // ✅ support old token
                 User.FindFirst(ClaimTypes.NameIdentifier)?.Value ??
                 User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value ??
                 User.FindFirst("sub")?.Value;
 
             return int.TryParse(v, out var id) ? id : null;
         }
-
 
         // ✅ If BookingDate is saved as Dubai local (Unspecified), convert correctly to UTC for Hangfire
         private static DateTime DubaiLocalToUtc(DateTime bookingDate)
@@ -99,7 +96,7 @@ namespace PTfinder.API.Controllers
             _context.Bookings.Add(booking);
             await _context.SaveChangesAsync(ct);
 
-            // Notification → Coach
+            // ✅ Notification → Coach (DB + SignalR; usually fast)
             await _notifications.NotifyCoachBookingRequest(
                 coachId: booking.CoachId,
                 bookingId: booking.Id,
@@ -110,72 +107,11 @@ namespace PTfinder.API.Controllers
                 ct: ct
             );
 
-            var whenText = DubaiWhenText(booking.BookingDate);
-            var coachManageUrl = $"{WebBaseUrl}/dashboard/bookings/{booking.Id}";
-
-            // Email → Coach
-            var coachHtml = EmailTemplates.BookingRequestCoachHtml(
-                coachName: coach.FullName ?? "Coach",
-                studentName: booking.StudentName ?? "",
-                studentEmail: booking.StudentEmail ?? "",
-                studentPhone: booking.StudentPhone ?? "",
-                whenText: whenText,
-                timeSlot: booking.TimeSlot ?? "",
-                manageUrl: coachManageUrl,
-                logoUrl: "https://ptfindernow.com/images/PtFinderNow.png"
+            // ✅ Emails moved to background (fast API response)
+            _jobs.Enqueue<IBookingEmailFlows>(x =>
+                x.SendBookingCreatedEmails(booking.Id, CancellationToken.None)
             );
 
-            var coachText =
-$@"You have a new booking request.
-
-Client: {booking.StudentName}
-Email: {booking.StudentEmail}
-Phone: {booking.StudentPhone}
-Date/Time: {whenText}
-Time Slot: {booking.TimeSlot}
-
-Open in dashboard:
-{coachManageUrl}
-
-— PTfinderNow";
-
-            await _sender.SendAsync(
-                to: coach.Email,
-                subject: $"New booking request — session from {booking.StudentName}",
-                htmlBody: coachHtml,
-                textBody: coachText,
-                ct: ct
-            );
-
-            // Email → Student
-            var studentHtml = EmailTemplates.BookingRequestStudentHtml(
-                studentName: booking.StudentName ?? "Client",
-                coachName: coach.FullName ?? "Coach",
-                whenText: whenText,
-                timeSlot: booking.TimeSlot ?? "",
-                logoUrl: "https://ptfindernow.com/images/PtFinderNow.png"
-            );
-
-            var studentText =
-$@"Your booking request was sent to {coach.FullName}.
-
-Requested time: {whenText}
-Time Slot: {booking.TimeSlot}
-
-You'll receive an email when the coach confirms or declines.
-
-— PTfinderNow";
-
-            await _sender.SendAsync(
-                to: booking.StudentEmail,
-                subject: $"Your request was sent to {coach.FullName} — PTfinderNow",
-                htmlBody: studentHtml,
-                textBody: studentText,
-                ct: ct
-            );
-
-            // You can keep this, but note: it returns booking object publicly.
-            // It's OK, but if you want, return only booking.Id instead.
             return CreatedAtAction(nameof(GetBooking), new { id = booking.Id }, booking);
         }
 
@@ -252,6 +188,7 @@ You'll receive an email when the coach confirms or declines.
             {
                 var startUtc = DubaiLocalToUtc(booking.BookingDate);
 
+                // reminders
                 var run24 = startUtc.AddHours(-24);
                 if (run24 > DateTime.UtcNow.AddMinutes(1))
                 {
@@ -262,7 +199,6 @@ You'll receive an email when the coach confirms or declines.
                 }
 
                 var run2 = startUtc.AddHours(-2);
-
                 if (run2 > DateTime.UtcNow.AddMinutes(1))
                 {
                     _jobs.Schedule<IBookingReminderEmails>(
@@ -272,8 +208,6 @@ You'll receive an email when the coach confirms or declines.
                 }
                 else
                 {
-                    // ✅ If we're inside the 2-hour window (or it already passed), still notify
-                    // as long as session hasn't started yet.
                     if (startUtc > DateTime.UtcNow.AddMinutes(5))
                     {
                         _jobs.Enqueue<IBookingReminderEmails>(
@@ -282,7 +216,7 @@ You'll receive an email when the coach confirms or declines.
                     }
                 }
 
-
+                // ✅ Notification → Coach
                 await _notifications.NotifyCoachBookingConfirmed(
                     coachId: booking.CoachId,
                     bookingId: booking.Id,
@@ -290,34 +224,17 @@ You'll receive an email when the coach confirms or declines.
                     serviceName: "session",
                     startsAtLocal: booking.BookingDate,
                     timezone: "Asia/Dubai",
-                    ct: ct);
-
-                var html = EmailTemplates.BookingAcceptedStudentHtml(
-                    studentName: booking.StudentName ?? "Client",
-                    coachName: coach.FullName ?? "Coach",
-                    whenText: whenText,
-                    timeSlot: booking.TimeSlot ?? "",
-                    logoUrl: "https://ptfindernow.com/images/PtFinderNow.png"
+                    ct: ct
                 );
 
-                var text =
-$@"Booking confirmed ✅
-
-Coach: {coach.FullName}
-Date/Time: {whenText}
-Time Slot: {booking.TimeSlot}
-
-— PTfinderNow";
-
-                await _sender.SendAsync(
-                    to: booking.StudentEmail,
-                    subject: $"Booking confirmed — with {coach.FullName} (PTfinderNow)",
-                    htmlBody: html,
-                    textBody: text,
-                    ct: ct);
+                // ✅ Student email in background
+                _jobs.Enqueue<IBookingEmailFlows>(x =>
+                    x.SendBookingAcceptedEmail(booking.Id, CancellationToken.None)
+                );
             }
             else if (statusDto.Status == BookingStatus.Cancelled)
             {
+                // ✅ Notification → Coach
                 await _notifications.NotifyCoachBookingDeclined(
                     coachId: booking.CoachId,
                     bookingId: booking.Id,
@@ -325,37 +242,13 @@ Time Slot: {booking.TimeSlot}
                     serviceName: "session",
                     startsAtLocal: booking.BookingDate,
                     timezone: "Asia/Dubai",
-                    ct: ct);
-
-                var searchUrl = $"{WebBaseUrl}/coaches/search";
-
-                var html = EmailTemplates.BookingDeclinedStudentHtml(
-                    studentName: booking.StudentName ?? "Client",
-                    coachName: coach.FullName ?? "Coach",
-                    whenText: whenText,
-                    timeSlot: booking.TimeSlot ?? "",
-                    searchUrl: searchUrl,
-                    logoUrl: "https://ptfindernow.com/images/PtFinderNow.png"
+                    ct: ct
                 );
 
-                var text =
-$@"Booking declined ❌
-
-Coach: {coach.FullName}
-Requested time: {whenText}
-Time Slot: {booking.TimeSlot}
-
-Search for another coach:
-{searchUrl}
-
-— PTfinderNow";
-
-                await _sender.SendAsync(
-                    to: booking.StudentEmail,
-                    subject: $"{coach.FullName} declined your request — PTfinderNow",
-                    htmlBody: html,
-                    textBody: text,
-                    ct: ct);
+                // ✅ Student email in background
+                _jobs.Enqueue<IBookingEmailFlows>(x =>
+                    x.SendBookingDeclinedEmail(booking.Id, CancellationToken.None)
+                );
             }
 
             return NoContent();
@@ -384,4 +277,3 @@ Search for another coach:
         }
     }
 }
-
