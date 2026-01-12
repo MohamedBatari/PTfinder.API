@@ -23,7 +23,7 @@ namespace PTfinder.API.Services
             string stripeSubscriptionId,
             DateTime? currentPeriodEndUtc)
         {
-            if (!int.TryParse(coachIdString, out var coachId))
+            if (!int.TryParse((coachIdString ?? "").Trim(), out var coachId) || coachId <= 0)
                 return;
 
             var coach = await _db.Coaches.FirstOrDefaultAsync(c => c.Id == coachId);
@@ -34,20 +34,26 @@ namespace PTfinder.API.Services
             coach.StripeCustomerId = stripeCustomerId;
             coach.StripeSubscriptionId = stripeSubscriptionId;
 
-            coach.SubscriptionTier = plan.ToLower() switch
+            coach.SubscriptionTier = (plan ?? "").Trim().ToLowerInvariant() switch
             {
                 "basic" => SubscriptionTier.Basic,
-                "pro" => SubscriptionTier.Standard,
+                "pro" => SubscriptionTier.Standard,   // pro == standard in your enum
+                "standard" => SubscriptionTier.Standard,
                 _ => SubscriptionTier.None
             };
 
             coach.SubscriptionStatus = SubscriptionStatus.Active;
-            coach.SubscriptionStartedAtUtc = now;
+            coach.IsActive = true;
 
-            if (currentPeriodEndUtc.HasValue)
+            coach.SubscriptionStartedAtUtc ??= now;
+
+            var end = NormalizeUtc(currentPeriodEndUtc);
+
+            // ✅ never save 1970 / nonsense
+            if (IsValidEnd(end))
             {
-                coach.CurrentPeriodEndUtc = currentPeriodEndUtc.Value;
-                coach.SubscriptionExpiresAtUtc = currentPeriodEndUtc.Value;
+                coach.CurrentPeriodEndUtc = end;
+                coach.SubscriptionExpiresAtUtc = end;
             }
 
             coach.UpdatedAtUtc = now;
@@ -59,31 +65,62 @@ namespace PTfinder.API.Services
             string status,
             DateTime? currentPeriodEndUtc)
         {
+            if (string.IsNullOrWhiteSpace(stripeSubscriptionId)) return;
+
             var coach = await _db.Coaches
                 .FirstOrDefaultAsync(c => c.StripeSubscriptionId == stripeSubscriptionId);
 
             if (coach == null) return;
 
-            coach.SubscriptionStatus = status switch
+            var s = (status ?? "").Trim().ToLowerInvariant();
+
+            coach.SubscriptionStatus = s switch
             {
                 "active" => SubscriptionStatus.Active,
                 "trialing" => SubscriptionStatus.Active,
                 "past_due" => SubscriptionStatus.PastDue,
-                "canceled" => SubscriptionStatus.Canceled,
                 "unpaid" => SubscriptionStatus.PastDue,
-                _ => coach.SubscriptionStatus
+                "canceled" => SubscriptionStatus.Canceled,
+                "incomplete" => SubscriptionStatus.Inactive,
+                "incomplete_expired" => SubscriptionStatus.Inactive,
+                _ => SubscriptionStatus.Inactive
             };
 
-            if (currentPeriodEndUtc.HasValue)
+            // ✅ your Search() requires IsActive
+            coach.IsActive = coach.SubscriptionStatus == SubscriptionStatus.Active;
+
+            var end = NormalizeUtc(currentPeriodEndUtc);
+
+            // ✅ do NOT overwrite good dates with 1970
+            if (IsValidEnd(end))
             {
-                coach.CurrentPeriodEndUtc = currentPeriodEndUtc.Value;
-                coach.SubscriptionExpiresAtUtc = currentPeriodEndUtc.Value;
+                coach.CurrentPeriodEndUtc = end;
+                coach.SubscriptionExpiresAtUtc = end;
             }
 
             coach.UpdatedAtUtc = DateTime.UtcNow;
             await _db.SaveChangesAsync();
         }
+
+        private static DateTime? NormalizeUtc(DateTime? dt)
+        {
+            if (!dt.HasValue) return null;
+
+            if (dt.Value.Kind == DateTimeKind.Unspecified)
+                return DateTime.SpecifyKind(dt.Value, DateTimeKind.Utc);
+
+            return dt.Value.ToUniversalTime();
+        }
+
+        private static bool IsValidEnd(DateTime? dt)
+        {
+            if (!dt.HasValue) return false;
+
+            // reject epoch / nonsense values
+            return dt.Value >= new DateTime(2001, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        }
     }
 }
+
 
 

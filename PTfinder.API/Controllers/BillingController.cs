@@ -499,7 +499,8 @@ namespace PTfinder.API.Controllers
                     }
                 }
             }
-            else if (evt.Type == Events.CustomerSubscriptionUpdated ||
+            else if (evt.Type == Events.CustomerSubscriptionCreated || 
+                     evt.Type == Events.CustomerSubscriptionUpdated ||
                      evt.Type == Events.CustomerSubscriptionDeleted)
             {
                 var subscription = evt.Data.Object as Stripe.Subscription;
