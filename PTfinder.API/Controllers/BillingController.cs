@@ -224,12 +224,10 @@ namespace PTfinder.API.Controllers
                 var acct = await svc.GetAsync(coach.StripeAccountId);
 
                 // ✅ Sync Stripe flags into your DB
-                // (Use ?? false only if your DB columns are NOT NULL bools)
                 coach.StripeChargesEnabled = acct.ChargesEnabled;
                 coach.StripePayoutsEnabled = acct.PayoutsEnabled;
                 coach.StripeDetailsSubmitted = acct.DetailsSubmitted;
 
-                // Save only if changed (optional but clean)
                 await _db.SaveChangesAsync();
 
                 var req = acct.Requirements;
@@ -244,7 +242,7 @@ namespace PTfinder.API.Controllers
                     accountId = acct.Id,
                     chargesEnabled = acct.ChargesEnabled,
                     payoutsEnabled = acct.PayoutsEnabled,
-                    detailsSubmitted = acct.DetailsSubmitted, // ✅ add this in response too
+                    detailsSubmitted = acct.DetailsSubmitted,
                     disabledReason,
                     requirements = req?.CurrentlyDue ?? new List<string>(),
                     pastDue = req?.PastDue ?? new List<string>(),
@@ -252,7 +250,6 @@ namespace PTfinder.API.Controllers
                     pendingVerification = req?.PendingVerification ?? new List<string>(),
                     canLoginLink
                 });
-
             }
             catch (StripeException se)
             {
@@ -322,13 +319,13 @@ namespace PTfinder.API.Controllers
                 CancelUrl = cancelUrl,
                 PaymentMethodTypes = new List<string> { "card" },
                 LineItems = new List<SessionLineItemOptions>
-        {
-            new SessionLineItemOptions
-            {
-                Price = priceId,
-                Quantity = 1
-            }
-        },
+                {
+                    new SessionLineItemOptions
+                    {
+                        Price = priceId,
+                        Quantity = 1
+                    }
+                },
                 ClientReferenceId = req.CoachId.ToString(),
                 Metadata = new Dictionary<string, string>
                 {
@@ -336,7 +333,6 @@ namespace PTfinder.API.Controllers
                     ["billingPeriod"] = req.Yearly ? "yearly" : "monthly",
                     ["kind"] = "subscription"
                 },
-                // ✅ 14-day free trial – Stripe will check card, but first charge only after trial end
                 SubscriptionData = new SessionSubscriptionDataOptions
                 {
                     TrialPeriodDays = 14
@@ -510,7 +506,7 @@ namespace PTfinder.API.Controllers
                     }
                 }
             }
-            else if (evt.Type == Events.CustomerSubscriptionCreated || 
+            else if (evt.Type == Events.CustomerSubscriptionCreated ||
                      evt.Type == Events.CustomerSubscriptionUpdated ||
                      evt.Type == Events.CustomerSubscriptionDeleted)
             {
@@ -542,6 +538,10 @@ namespace PTfinder.API.Controllers
             return Ok();
         }
 
+        // =====================================================================
+        // UPDATED: Trial email vs Active email
+        // =====================================================================
+
         private async Task HandleSubscriptionSessionCompleted(Session session)
         {
             var plan = session.Metadata != null && session.Metadata.TryGetValue("plan", out var p)
@@ -552,113 +552,151 @@ namespace PTfinder.API.Controllers
             var subscriptionId = session.SubscriptionId;
             var customerId = session.CustomerId;
 
-            if (!string.IsNullOrWhiteSpace(subscriptionId))
+            if (string.IsNullOrWhiteSpace(subscriptionId))
+                return;
+
+            var subSvc = new Stripe.SubscriptionService();
+            var sub = await subSvc.GetAsync(subscriptionId);
+
+            // 1) Update internal subscription state (your service)
+            await _coachSubscriptions.HandleCheckoutCompletedAsync(
+                coachIdString,
+                plan,
+                customerId,
+                subscriptionId,
+                sub.CurrentPeriodEnd
+            );
+
+            // 2) Email coach (trial email OR active email)
+            if (!int.TryParse(coachIdString, out var coachIdInt))
+                return;
+
+            var coach = await _db.Coaches.AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Id == coachIdInt);
+
+            if (coach == null || string.IsNullOrWhiteSpace(coach.Email))
+                return;
+
+            Invoice? invoice = null;
+            try
             {
-                var subSvc = new Stripe.SubscriptionService();
-                var sub = await subSvc.GetAsync(subscriptionId);
-
-                // 1) Your existing logic: update internal subscription state
-                await _coachSubscriptions.HandleCheckoutCompletedAsync(
-                    coachIdString,
-                    plan,
-                    customerId,
-                    subscriptionId,
-                    sub.CurrentPeriodEnd
-                );
-
-                // 2) New: send email to coach with subscription + invoice info
-                if (int.TryParse(coachIdString, out var coachIdInt))
+                var latestInvoiceId = sub.LatestInvoiceId;
+                if (!string.IsNullOrWhiteSpace(latestInvoiceId))
                 {
-                    var coach = await _db.Coaches.AsNoTracking()
-                        .FirstOrDefaultAsync(c => c.Id == coachIdInt);
+                    var invSvc = new InvoiceService();
+                    invoice = await invSvc.GetAsync(latestInvoiceId);
+                }
+            }
+            catch
+            {
+                // ignore invoice fetch errors
+            }
 
-                    if (coach != null && !string.IsNullOrWhiteSpace(coach.Email))
-                    {
-                        Invoice? invoice = null;
-                        try
-                        {
-                            var latestInvoiceId = sub.LatestInvoiceId;
-                            if (!string.IsNullOrWhiteSpace(latestInvoiceId))
-                            {
-                                var invSvc = new InvoiceService();
-                                invoice = await invSvc.GetAsync(latestInvoiceId);
-                            }
-                        }
-                        catch
-                        {
-                            // ignore invoice fetch errors
-                        }
+            var firstItem = sub.Items?.Data?.FirstOrDefault();
+            var price = firstItem?.Price;
 
-                        var firstItem = sub.Items?.Data?.FirstOrDefault();
-                        var price = firstItem?.Price;
-                        var currency = (invoice?.Currency ?? price?.Currency ?? "aed").ToUpperInvariant();
-                        long unitAmountMinor = price?.UnitAmount ?? 0;
-                        var amount = unitAmountMinor / 100m;
+            var currency = (invoice?.Currency ?? price?.Currency ?? "aed").ToUpperInvariant();
+            long unitAmountMinor = price?.UnitAmount ?? 0;
+            var amount = unitAmountMinor / 100m;
 
-                        var interval = price?.Recurring?.Interval ?? "month";
-                        var intervalCount = price?.Recurring?.IntervalCount ?? 1;
+            var interval = price?.Recurring?.Interval ?? "month";
+            var intervalCount = price?.Recurring?.IntervalCount ?? 1;
 
-                        // Stripe .NET gives DateTime (or DateTime?) – no Unix conversion needed
-                        var currentPeriodStart = sub.CurrentPeriodStart;
-                        var currentPeriodEnd = sub.CurrentPeriodEnd;
+            var currentPeriodStart = sub.CurrentPeriodStart;
+            var currentPeriodEnd = sub.CurrentPeriodEnd;
 
-                        DateTime? trialEnd = sub.TrialEnd;
+            DateTime? trialEnd = sub.TrialEnd;
 
-                        var planLabel = plan.Equals("pro", StringComparison.OrdinalIgnoreCase) ? "Pro" : "Basic";
-                        var billingPeriodLabel = intervalCount == 1
-                            ? interval
-                            : $"{intervalCount} {interval}";
+            var planLabel = plan.Equals("pro", StringComparison.OrdinalIgnoreCase) ? "Pro" : "Basic";
+            var billingPeriodLabel = intervalCount == 1 ? interval : $"{intervalCount} {interval}";
 
-                        var hostedInvoiceUrl = invoice?.HostedInvoiceUrl;
-                        var invoicePdf = invoice?.InvoicePdf;
+            var hostedInvoiceUrl = invoice?.HostedInvoiceUrl;
+            var invoicePdf = invoice?.InvoicePdf;
 
-                        var subject = "✅ Your PTfinderNow subscription is active";
+            var isTrial =
+                string.Equals(sub.Status, "trialing", StringComparison.OrdinalIgnoreCase)
+                || trialEnd.HasValue;
 
-                        var bodyHtml = $@"
-<p>Hi <b>{coach.FullName ?? ""} </b>,</p>
+            string subject;
+            string bodyHtml;
+            string bodyText;
+
+            if (isTrial)
+            {
+                var trialEndText = trialEnd?.ToString("yyyy-MM-dd") ?? "";
+                subject = "🎉 Your PTfinderNow free trial has started";
+
+                bodyHtml = $@"
+<p>Hi <b>{coach.FullName ?? "Coach"}</b>,</p>
+<p>Welcome to PTfinderNow! 🎉 Your <b>free trial</b> has started.</p>
+<ul>
+  <li><b>Plan:</b> {planLabel}</li>
+  <li><b>Trial ends:</b> {trialEndText}</li>
+  <li><b>Next payment date:</b> {trialEndText}</li>
+  <li><b>Price after trial:</b> {currency} {amount:0.00} every {billingPeriodLabel}</li>
+</ul>
+<p>You won’t be charged during the trial. You can cancel anytime before the trial ends.</p>
+<p>Manage your subscription here: <a href=""{FrontendBase}/coach/subscription"">{FrontendBase}/coach/subscription</a></p>
+<p>- PTfinderNow</p>";
+
+                bodyText = $@"Hi {coach.FullName ?? "Coach"},
+
+Welcome to PTfinderNow! Your free trial has started.
+
+Plan: {planLabel}
+Trial ends: {trialEndText}
+Next payment date: {trialEndText}
+Price after trial: {currency} {amount:0.00} every {billingPeriodLabel}
+
+You won’t be charged during the trial. You can cancel anytime before the trial ends.
+
+Manage your subscription: {FrontendBase}/coach/subscription
+- PTfinderNow";
+            }
+            else
+            {
+                subject = "✅ Your PTfinderNow subscription is active";
+
+                bodyHtml = $@"
+<p>Hi <b>{coach.FullName ?? "Coach"}</b>,</p>
 <p>Your PTfinderNow subscription is now <b>active</b>.</p>
 <ul>
   <li><b>Plan:</b> {planLabel}</li>
   <li><b>Billing:</b> every {billingPeriodLabel}</li>
   <li><b>Amount:</b> {currency} {amount:0.00}</li>
   <li><b>Current period:</b> {currentPeriodStart:yyyy-MM-dd} → {currentPeriodEnd:yyyy-MM-dd}</li>
-  {(trialEnd.HasValue ? $"<li><b>Trial ends:</b> {trialEnd.Value:yyyy-MM-dd}</li>" : "")}
 </ul>
 {(string.IsNullOrWhiteSpace(hostedInvoiceUrl) ? "" : $"<p><b>Invoice (online):</b> <a href=\"{hostedInvoiceUrl}\">{hostedInvoiceUrl}</a></p>")}
 {(string.IsNullOrWhiteSpace(invoicePdf) ? "" : $"<p><b>Invoice PDF:</b> <a href=\"{invoicePdf}\">{invoicePdf}</a></p>")}
-<p>You can manage your subscription anytime here: <a href=""{FrontendBase}/coach/subscription"">Subscription Dashboard</a>.</p>
+<p>You can manage your subscription anytime here: <a href=""{FrontendBase}/coach/subscription"">{FrontendBase}/coach/subscription</a>.</p>
 <p>- PTfinderNow</p>";
 
-                        var bodyText =
-$@"Hi {coach.FullName ?? "Coach"},
+                bodyText = $@"Hi {coach.FullName ?? "Coach"},
 
-Your PTfinderNow subscription is now active.
+Your PTfinderNow subscription is active.
 
 Plan: {planLabel}
 Billing: every {billingPeriodLabel}
 Amount: {currency} {amount:0.00}
 Current period: {currentPeriodStart:yyyy-MM-dd} → {currentPeriodEnd:yyyy-MM-dd}" +
-(trialEnd.HasValue ? $"\nTrial ends: {trialEnd.Value:yyyy-MM-dd}" : "") +
-(string.IsNullOrWhiteSpace(hostedInvoiceUrl) ? "" : $"\nInvoice (online): {hostedInvoiceUrl}") +
-(string.IsNullOrWhiteSpace(invoicePdf) ? "" : $"\nInvoice PDF: {invoicePdf}") +
+(!string.IsNullOrWhiteSpace(hostedInvoiceUrl) ? $"\nInvoice (online): {hostedInvoiceUrl}" : "") +
+(!string.IsNullOrWhiteSpace(invoicePdf) ? $"\nInvoice PDF: {invoicePdf}" : "") +
 $"\n\nManage your subscription: {FrontendBase}/coach/subscription\n- PTfinderNow";
+            }
 
-                        try
-                        {
-                            await _email.SendAsync(
-                                to: coach.Email,
-                                subject: subject,
-                                htmlBody: bodyHtml,
-                                textBody: bodyText,
-                                tags: new[] { ("Event", "SubscriptionStarted") }
-                            );
-                        }
-                        catch (Exception mailEx)
-                        {
-                            Console.WriteLine("Subscription email send error: " + mailEx.Message);
-                        }
-                    }
-                }
+            try
+            {
+                await _email.SendAsync(
+                    to: coach.Email,
+                    subject: subject,
+                    htmlBody: bodyHtml,
+                    textBody: bodyText,
+                    tags: new[] { ("Event", isTrial ? "TrialStarted" : "SubscriptionStarted") }
+                );
+            }
+            catch (Exception mailEx)
+            {
+                Console.WriteLine("Subscription email send error: " + mailEx.Message);
             }
         }
 
@@ -733,6 +771,7 @@ $"\n\nManage your subscription: {FrontendBase}/coach/subscription\n- PTfinderNow
 You received a gift of AED {gross:0.00}{(string.IsNullOrWhiteSpace(donor) ? "" : $" from {donor}")}.
 Your payout (80%) is AED {net:0.00}. The remaining 20% is the platform fee.
 {(string.IsNullOrWhiteSpace(note) ? "" : $"Message: {note}")}
+
 Dashboard: {FrontendBase}/dashboard/gifts
 - PTfinderNow";
 
