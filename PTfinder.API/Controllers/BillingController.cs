@@ -223,6 +223,15 @@ namespace PTfinder.API.Controllers
                 var svc = new AccountService();
                 var acct = await svc.GetAsync(coach.StripeAccountId);
 
+                // ✅ Sync Stripe flags into your DB
+                // (Use ?? false only if your DB columns are NOT NULL bools)
+                coach.StripeChargesEnabled = acct.ChargesEnabled;
+                coach.StripePayoutsEnabled = acct.PayoutsEnabled;
+                coach.StripeDetailsSubmitted = acct.DetailsSubmitted;
+
+                // Save only if changed (optional but clean)
+                await _db.SaveChangesAsync();
+
                 var req = acct.Requirements;
                 var disabledReason = (req?.DisabledReason ?? string.Empty).ToLowerInvariant();
                 var hasDue = (req?.CurrentlyDue?.Any() ?? false) || (req?.PastDue?.Any() ?? false);
@@ -235,6 +244,7 @@ namespace PTfinder.API.Controllers
                     accountId = acct.Id,
                     chargesEnabled = acct.ChargesEnabled,
                     payoutsEnabled = acct.PayoutsEnabled,
+                    detailsSubmitted = acct.DetailsSubmitted, // ✅ add this in response too
                     disabledReason,
                     requirements = req?.CurrentlyDue ?? new List<string>(),
                     pastDue = req?.PastDue ?? new List<string>(),
@@ -242,6 +252,7 @@ namespace PTfinder.API.Controllers
                     pendingVerification = req?.PendingVerification ?? new List<string>(),
                     canLoginLink
                 });
+
             }
             catch (StripeException se)
             {
