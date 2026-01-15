@@ -353,7 +353,7 @@ namespace PTfinder.API.Controllers
             }
 
             var now = DateTime.UtcNow;
-            var end = now.AddMonths(12);
+            var end = now.AddMonths(6);
 
             var categoryName = await _context.Categories
                 .Where(x => x.Id == dto.CategoryId)
