@@ -28,11 +28,38 @@ namespace PTfinder.API.Controllers
             var email = (request?.Email ?? string.Empty).Trim().ToLowerInvariant();
             var password = request?.Password ?? string.Empty;
 
-            // ✅ also normalize stored email (in DB should be lower)
-            var coach = _context.Coaches.SingleOrDefault(c => c.Email.ToLower() == email);
+            if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
+                return BadRequest(new { message = "Email and password are required" });
 
-            // ⚠️ your current password is plain text compare (ok for prelaunch only)
-            if (coach == null || coach.Password != password)
+            // ✅ query by normalized email (DB already stores lower)
+            var coach = _context.Coaches.SingleOrDefault(c => c.Email == email);
+
+            if (coach == null)
+                return Unauthorized(new { message = "Invalid email or password" });
+
+            // ✅ verify password (supports BOTH hashed + legacy plain passwords)
+            bool ok;
+            var stored = coach.Password ?? "";
+
+            if (stored.StartsWith("$2")) // bcrypt hash
+            {
+                ok = BCrypt.Net.BCrypt.Verify(password, stored);
+            }
+            else
+            {
+                // legacy prelaunch accounts (plain text)
+                ok = (stored == password);
+
+                // ✅ auto-upgrade legacy password to bcrypt after successful login
+                if (ok)
+                {
+                    coach.Password = BCrypt.Net.BCrypt.HashPassword(password);
+                    coach.UpdatedAtUtc = DateTime.UtcNow;
+                    _context.SaveChanges();
+                }
+            }
+
+            if (!ok)
                 return Unauthorized(new { message = "Invalid email or password" });
 
             if (!coach.EmailVerified)
@@ -52,6 +79,7 @@ namespace PTfinder.API.Controllers
                 coachId = coach.Id
             });
         }
+
 
         private string GenerateJwtToken(Coach coach)
         {
