@@ -338,12 +338,7 @@ namespace PTfinder.API.Controllers
             if (string.IsNullOrWhiteSpace(dto.Password) || dto.Password.Length < 8)
                 return BadRequest(new { error = "Password must be at least 8 characters." });
 
-            if (string.IsNullOrWhiteSpace(dto.ConfirmPassword))
-                return BadRequest(new { error = "Please confirm your password." });
-
-            if (dto.Password != dto.ConfirmPassword)
-                return BadRequest(new { error = "Passwords do not match." });
-
+           
             // ✅ Capture IP (proxy header first)
             string? ip = null;
             var xff = Request.Headers["X-Forwarded-For"].FirstOrDefault();

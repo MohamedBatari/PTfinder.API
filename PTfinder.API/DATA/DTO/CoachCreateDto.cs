@@ -19,8 +19,6 @@
         public int SpecialityId { get; set; }
 
         public IFormFile ProfileImage { get; set; }
-        public string ConfirmPassword { get; set; }
-
 
         public bool TermsAccepted { get; set; }
         public string? TermsVersion { get; set; }
