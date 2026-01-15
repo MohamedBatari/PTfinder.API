@@ -317,7 +317,6 @@ namespace PTfinder.API.Controllers
 
             return Ok(result);
         }
-
         [HttpPost]
         public async Task<ActionResult<Coach>> PostCoach([FromForm] CoachCreateDto dto)
         {
@@ -335,12 +334,36 @@ namespace PTfinder.API.Controllers
             if (dto.PrivacyVersion.Length > 20)
                 return BadRequest(new { error = "Invalid Privacy version." });
 
+            // ✅ Confirm password (server-side)
+            if (string.IsNullOrWhiteSpace(dto.Password) || dto.Password.Length < 8)
+                return BadRequest(new { error = "Password must be at least 8 characters." });
+
+            if (string.IsNullOrWhiteSpace(dto.ConfirmPassword))
+                return BadRequest(new { error = "Please confirm your password." });
+
+            if (dto.Password != dto.ConfirmPassword)
+                return BadRequest(new { error = "Passwords do not match." });
+
             // ✅ Capture IP (proxy header first)
             string? ip = null;
             var xff = Request.Headers["X-Forwarded-For"].FirstOrDefault();
             if (!string.IsNullOrWhiteSpace(xff))
                 ip = xff.Split(',').FirstOrDefault()?.Trim();
             ip ??= HttpContext?.Connection?.RemoteIpAddress?.ToString();
+
+            // ✅ Capture User-Agent from request header (strong evidence)
+            var uaHeader = Request.Headers["User-Agent"].ToString();
+            var ua = !string.IsNullOrWhiteSpace(uaHeader)
+                ? uaHeader
+                : (string.IsNullOrWhiteSpace(dto.UserAgent) ? null : dto.UserAgent.Trim());
+
+            // ✅ Normalize consent language
+            var consentLang = string.IsNullOrWhiteSpace(dto.ConsentLanguage)
+                ? null
+                : dto.ConsentLanguage.Trim().ToLower();
+
+            if (consentLang is not null && consentLang != "en" && consentLang != "ar")
+                consentLang = null;
 
             string? blobName = null;
 
@@ -353,6 +376,8 @@ namespace PTfinder.API.Controllers
             }
 
             var now = DateTime.UtcNow;
+
+            // ✅ FREE PERIOD = 6 MONTHS
             var end = now.AddMonths(6);
 
             var categoryName = await _context.Categories
@@ -368,9 +393,8 @@ namespace PTfinder.API.Controllers
             categoryName = string.IsNullOrWhiteSpace(categoryName) ? "your selected category" : categoryName;
             specialityName = string.IsNullOrWhiteSpace(specialityName) ? "your selected speciality" : specialityName;
 
-            var consentLang = string.IsNullOrWhiteSpace(dto.ConsentLanguage)
-                ? null
-                : dto.ConsentLanguage.Trim().ToLower();
+            // ✅ IMPORTANT: hash password (do NOT store plain text)
+            var hashedPassword = BCrypt.Net.BCrypt.HashPassword(dto.Password);
 
             var coach = new Coach
             {
@@ -378,8 +402,8 @@ namespace PTfinder.API.Controllers
                 Email = dto.Email?.Trim().ToLower(),
                 PhoneNumber = dto.PhoneNumber,
 
-                // ✅ Prelaunch (NO HASH)
-                Password = dto.Password,
+                // ✅ STORE HASH
+                Password = hashedPassword,
 
                 Gender = dto.Gender,
                 Price = dto.Price,
@@ -394,6 +418,7 @@ namespace PTfinder.API.Controllers
                 EmailVerified = true,
                 IsActive = true,
 
+                // ✅ Free 6 months of Standard (AED 149 plan in your enum)
                 SubscriptionTier = SubscriptionTier.Standard,
                 SubscriptionStatus = SubscriptionStatus.Active,
                 SubscriptionStartedAtUtc = now,
@@ -403,16 +428,17 @@ namespace PTfinder.API.Controllers
                 StripeCustomerId = null,
                 StripeSubscriptionId = null,
 
+                // ✅ Evidence: server time + IP + UA
                 TermsVersionAccepted = dto.TermsVersion.Trim(),
-                TermsAcceptedAtUtc = dto.TermsAcceptedAtUtc ?? now,
+                TermsAcceptedAtUtc = now,
                 TermsAcceptedIp = ip,
 
                 PrivacyVersionAccepted = dto.PrivacyVersion.Trim(),
-                PrivacyAcceptedAtUtc = dto.PrivacyAcceptedAtUtc ?? now,
+                PrivacyAcceptedAtUtc = now,
                 PrivacyAcceptedIp = ip,
                 PrivacyLanguage = consentLang,
 
-                UserAgent = dto.UserAgent,
+                UserAgent = ua,
                 ClientTimeZone = dto.ClientTimeZone,
 
                 CreatedAtUtc = now,
@@ -442,53 +468,26 @@ namespace PTfinder.API.Controllers
             );
 
             var text =
-$@"Hi {first},
+        $@"Hi {first},
 
 Welcome to PTfinderNow 👋  
 We’re excited to have you onboard.
 
-Your expert profile is now live on PTfinderNow, a platform designed to help professionals like you attract clients, manage bookings, and grow visibility — all in one place.
-
-🎯 What PTfinderNow does for you:
-• Makes your profile publicly discoverable by new clients
-• Shows your availability so clients can book faster
-• Displays your contact details (WhatsApp, phone, email) for direct inquiries
-• Collects reviews to build trust and credibility
-• Centralizes your gallery, pricing, and professional info
-• Saves you time managing requests and schedules
-
-⭐ Use PTfinderNow with your existing clients
-PTfinderNow isn’t only for new clients.
-
-You can also:
-• Share your profile link with previous clients
-• Ask them to leave a short review
-• Use your availability calendar instead of back-and-forth messages
-• Keep everything professional and organized in one place
-
-Many experts see faster growth when they add just **2–3 reviews from past clients**.
+Your expert profile is now live on PTfinderNow.
 
 🚀 Your Early Access Benefits
-As part of our early access program, your account currently includes premium features at no cost:
-• Priority visibility
-• Full calendar & booking tools
-• Gallery & reviews
-• Advanced profile features
-• Access to future monetization tools (Thanks Gifts)
+As part of our early access program, your account includes premium features at no cost until: {premiumUntil}
 
-📌 Recommended next steps:
-1) Upload a high-quality profile photo  
-2) Add your availability for this week  
-3) Add 2–3 reviews from previous clients  
-4) Share your PTfinderNow profile link on WhatsApp or Instagram  
+✅ Consent record (for your reference)
+Terms version: {coach.TermsVersionAccepted}
+Privacy version: {coach.PrivacyVersionAccepted}
+Accepted at: {now:yyyy-MM-dd HH:mm} UTC
 
 👉 Go to your dashboard:
 https://ptfindernow.com/dashboard
 
-If you need help or have questions, our team is here for you:
-📧 info@ptfindernow.com
-
-We’re happy to have you with us and look forward to seeing you grow on PTfinderNow.
+If you need help:
+info@ptfindernow.com
 
 Best regards,  
 **The PTfinderNow Team**
