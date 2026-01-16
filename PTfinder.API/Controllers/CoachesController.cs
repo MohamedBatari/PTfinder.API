@@ -448,7 +448,7 @@ namespace PTfinder.API.Controllers
                 .Split(' ', StringSplitOptions.RemoveEmptyEntries)
                 .FirstOrDefault() ?? "there";
 
-            var subject = "Welcome to PTfinderNow — Your Expert Profile Is Live 🚀";
+            var subject = "Welcome to PTfinderNow — Your Expert Profile Is Live ";
             var premiumUntil = end.ToString("yyyy-MM-dd");
             var logoUrl = "https://ptfindernow.com/images/PtFinderNow.png";
 
