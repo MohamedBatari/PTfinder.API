@@ -207,13 +207,15 @@ namespace PTfinder.API.Controllers
 
         [HttpGet("Search")]
         public async Task<IActionResult> Search(
-            [FromQuery] int? CategoryId,
-            [FromQuery] int? SpecialityId,
-            [FromQuery] int? CountryId,
-            [FromQuery] int? CityId,
-            [FromQuery] int? AreaId,
-            [FromQuery] string? Gender,
-            [FromQuery] string? FullName)
+     [FromQuery] int? CategoryId,
+     [FromQuery] int? SpecialityId,
+     [FromQuery] int? CountryId,
+     [FromQuery] int? CityId,
+     [FromQuery] int? AreaId,
+     [FromQuery] string? Gender,
+     [FromQuery] string? FullName,
+     [FromQuery] string? Sort = "Newest" // ✅ new
+ )
         {
             var nowUtc = DateTime.UtcNow;
 
@@ -243,9 +245,7 @@ namespace PTfinder.API.Controllers
             if (!string.IsNullOrWhiteSpace(Gender))
             {
                 var g = Gender.Trim().ToLower();
-                query = query.Where(c =>
-                    !string.IsNullOrEmpty(c.Gender) &&
-                    c.Gender.ToLower() == g);
+                query = query.Where(c => !string.IsNullOrEmpty(c.Gender) && c.Gender.ToLower() == g);
             }
 
             if (!string.IsNullOrWhiteSpace(FullName))
@@ -254,7 +254,7 @@ namespace PTfinder.API.Controllers
                 query = query.Where(c => c.FullName.ToLower().Contains(f));
             }
 
-            // 🔥 ONLY active subscriptions "till date"
+            // 🔥 ONLY active subscriptions
             query = query.Where(c =>
                 c.IsActive &&
                 c.EmailVerified &&
@@ -265,58 +265,62 @@ namespace PTfinder.API.Controllers
                 )
             );
 
-            var result = await query
-                .Select(c => new
-                {
-                    c.Id,
-                    c.FullName,
-                    ProfileImage = string.IsNullOrWhiteSpace(c.ProfileImage)
-                        ? null
-                        : _blobs.GetReadUrl(c.ProfileImage, TimeSpan.FromMinutes(60)),
-                    c.Price,
-                    c.Description,
-
-                    CategoryId = c.CategoryId,
-                    SpecialityId = c.SpecialityId,
-                    CountryId = c.CountryId,
-                    CityId = c.CityId,
-                    AreaId = c.AreaId,
-
-                    CategoryName = c.Category != null ? c.Category.Name : null,
-                    SpecialtyName = c.Speciality != null ? c.Speciality.Name : null,
-                    CountryName = c.Country != null ? c.Country.Name : null,
-                    CityName = c.City != null ? c.City.Name : null,
-                    AreaName = c.Area != null ? c.Area.Name : null,
-
-                    c.SubscriptionTier,
-                    c.SubscriptionStatus,
-                    c.SubscriptionExpiresAtUtc,
-                    c.CurrentPeriodEndUtc
-                })
-                .ToListAsync();
-
-            return Ok(result);
-        }
-
-        [HttpGet("Names")]
-        public async Task<IActionResult> Names([FromQuery] string? q, [FromQuery] int take = 1000)
-        {
-            var query = _context.Coaches.AsQueryable();
-
-            if (!string.IsNullOrWhiteSpace(q))
+            // ✅ Compute reviews/ratings (adjust table name/filters to your schema)
+            var projected = query.Select(c => new
             {
-                var t = q.Trim().ToLower();
-                query = query.Where(c => c.FullName.ToLower().StartsWith(t));
-            }
+                c.Id,
+                c.FullName,
+                c.CreatedAtUtc, // ✅ IMPORTANT (must exist in your Coach entity)
 
-            var result = await query
-                .OrderBy(c => c.FullName)
-                .Select(c => new { c.Id, c.FullName })
-                .Take(take)
-                .ToListAsync();
+                ProfileImage = string.IsNullOrWhiteSpace(c.ProfileImage)
+                    ? null
+                    : _blobs.GetReadUrl(c.ProfileImage, TimeSpan.FromMinutes(60)),
 
+                c.Price,
+                c.Description,
+
+                CategoryId = c.CategoryId,
+                SpecialityId = c.SpecialityId,
+                CountryId = c.CountryId,
+                CityId = c.CityId,
+                AreaId = c.AreaId,
+
+                CategoryName = c.Category != null ? c.Category.Name : null,
+                SpecialtyName = c.Speciality != null ? c.Speciality.Name : null,
+                CountryName = c.Country != null ? c.Country.Name : null,
+                CityName = c.City != null ? c.City.Name : null,
+                AreaName = c.Area != null ? c.Area.Name : null,
+
+                // ✅ Reviews fields (example)
+                NumReviews = _context.Reviews.Count(r => r.CoachId == c.Id),
+                AvgRating = _context.Reviews
+                    .Where(r => r.CoachId == c.Id)
+                    .Select(r => (double?)r.Rating)
+                    .Average() ?? 0.0,
+
+                // subs
+                c.SubscriptionTier,
+                c.SubscriptionStatus,
+                c.SubscriptionExpiresAtUtc,
+                c.CurrentPeriodEndUtc
+            });
+
+            // ✅ Server-side sort (so it always works)
+            Sort = (Sort ?? "Newest").Trim();
+
+            projected = Sort switch
+            {
+
+                "ReviewsDesc" => projected.OrderByDescending(x => x.NumReviews),
+                "Rating" => projected.OrderByDescending(x => x.AvgRating),
+                "Popularity" => projected, // only if you have bookings count
+                _ => projected.OrderByDescending(x => x.CreatedAtUtc) // ✅ Newest default
+            };
+
+            var result = await projected.ToListAsync();
             return Ok(result);
         }
+
         [HttpPost]
         public async Task<ActionResult<Coach>> PostCoach([FromForm] CoachCreateDto dto)
         {
