@@ -527,18 +527,20 @@ namespace PTfinder.API.Controllers
                 else if (evt.Type == Events.InvoicePaymentSucceeded || evt.Type == Events.InvoicePaid)
                 {
                     var invoice = evt.Data.Object as Stripe.Invoice;
+
                     if (!string.IsNullOrWhiteSpace(invoice?.SubscriptionId))
                     {
                         var sub = await new Stripe.SubscriptionService().GetAsync(invoice.SubscriptionId);
 
+                        // ✅ Update DB
                         await _coachSubscriptions.UpdateFromSubscriptionEventAsync(
                             sub.Id,
                             sub.Status,
                             sub.CurrentPeriodEnd
                         );
 
-                        // Optional: if you want to send a "bill paid" email here later,
-                        // use invoice.HostedInvoiceUrl and invoice.InvoicePdf.
+                        // ✅ Send invoice email
+                        await SendPaidInvoiceEmailAsync(invoice, sub);
                     }
                 }
                 // ✅ NEW: payment failed (mark past_due, notify later if you want)
@@ -829,6 +831,60 @@ Dashboard: {FrontendBase}/dashboard/gifts
             catch (Exception mailEx)
             {
                 Console.WriteLine("Email send error: " + mailEx.Message);
+            }
+        }
+        private async Task SendPaidInvoiceEmailAsync(Stripe.Invoice invoice, Stripe.Subscription sub)
+        {
+            try
+            {
+                var coach = await _db.Coaches.AsNoTracking()
+                    .FirstOrDefaultAsync(c => c.StripeSubscriptionId == invoice.SubscriptionId);
+
+                if (coach == null || string.IsNullOrWhiteSpace(coach.Email))
+                    return;
+
+                var currency = (invoice.Currency ?? "aed").ToUpperInvariant();
+                var paid = invoice.AmountPaid / 100m;
+
+                var hosted = invoice.HostedInvoiceUrl;
+                var pdf = invoice.InvoicePdf;
+
+                var subject = "🧾 PTfinderNow payment received — Invoice";
+
+                var bodyHtml = $@"
+<p>Hi <b>{coach.FullName ?? "Coach"}</b>,</p>
+<p>We received your subscription payment.</p>
+<ul>
+  <li><b>Amount paid:</b> {currency} {paid:0.00}</li>
+  <li><b>Period:</b> {sub.CurrentPeriodStart:yyyy-MM-dd} → {sub.CurrentPeriodEnd:yyyy-MM-dd}</li>
+</ul>
+{(string.IsNullOrWhiteSpace(hosted) ? "" : $"<p><b>Invoice (online):</b> <a href=\"{hosted}\">{hosted}</a></p>")}
+{(string.IsNullOrWhiteSpace(pdf) ? "" : $"<p><b>Invoice PDF:</b> <a href=\"{pdf}\">{pdf}</a></p>")}
+<p>Manage your subscription: <a href=""{FrontendBase}/coach/subscription"">{FrontendBase}/coach/subscription</a></p>
+<p>- PTfinderNow</p>";
+
+                var bodyText =
+        $@"Hi {coach.FullName ?? "Coach"},
+
+We received your subscription payment.
+
+Amount paid: {currency} {paid:0.00}
+Period: {sub.CurrentPeriodStart:yyyy-MM-dd} → {sub.CurrentPeriodEnd:yyyy-MM-dd}" +
+        (!string.IsNullOrWhiteSpace(hosted) ? $"\nInvoice (online): {hosted}" : "") +
+        (!string.IsNullOrWhiteSpace(pdf) ? $"\nInvoice PDF: {pdf}" : "") +
+        $"\n\nManage subscription: {FrontendBase}/coach/subscription\n- PTfinderNow";
+
+                await _email.SendAsync(
+                    to: coach.Email,
+                    subject: subject,
+                    htmlBody: bodyHtml,
+                    textBody: bodyText,
+                    tags: new[] { ("Event", "InvoicePaid") }
+                );
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Invoice email send error: " + ex.Message);
             }
         }
 
