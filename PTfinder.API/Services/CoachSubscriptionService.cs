@@ -100,6 +100,10 @@ namespace PTfinder.API.Services
 
             coach.UpdatedAtUtc = DateTime.UtcNow;
             await _db.SaveChangesAsync();
+
+            Console.WriteLine($"SERVICE UpdateFromSubscriptionEventAsync: sub={stripeSubscriptionId} status={status} end={currentPeriodEndUtc:O}");
+            await _db.SaveChangesAsync();
+            Console.WriteLine("SERVICE SaveChanges OK");
         }
 
         private static DateTime? NormalizeUtc(DateTime? dt)
