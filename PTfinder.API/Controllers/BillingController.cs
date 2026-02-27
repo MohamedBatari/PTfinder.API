@@ -52,6 +52,17 @@ namespace PTfinder.API.Controllers
         private static bool TryCoachId(string? s, out int id) =>
             int.TryParse((s ?? "").Trim(), out id);
 
+        [HttpGet("debug/db")]
+        public IActionResult DbDebug()
+        {
+            var conn = _db.Database.GetDbConnection();
+            return Ok(new
+            {
+                dataSource = conn.DataSource,
+                database = conn.Database
+            });
+        }
+
         // ---------- Quick probe ----------
         [HttpGet("debug/stripe")]
         public ActionResult<object> StripeDebug()
