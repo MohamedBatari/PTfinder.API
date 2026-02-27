@@ -491,48 +491,90 @@ namespace PTfinder.API.Controllers
                 return BadRequest(new { message = "Signature verification failed", error = se.Message });
             }
 
-            if (evt.Type == "checkout.session.completed")
+            // IMPORTANT: never let unhandled exceptions return 500 (Stripe will retry forever)
+            try
             {
-                var session = evt.Data.Object as Session;
-                if (session != null)
+                if (evt.Type == "checkout.session.completed")
                 {
-                    if (session.Mode == "payment")
+                    var session = evt.Data.Object as Session;
+                    if (session != null)
                     {
-                        await HandleGiftSessionCompleted(session);
+                        if (session.Mode == "payment")
+                        {
+                            await HandleGiftSessionCompleted(session);
+                        }
+                        else if (session.Mode == "subscription")
+                        {
+                            await HandleSubscriptionSessionCompleted(session);
+                        }
                     }
-                    else if (session.Mode == "subscription")
+                }
+                else if (evt.Type == Events.CustomerSubscriptionCreated ||
+                         evt.Type == Events.CustomerSubscriptionUpdated ||
+                         evt.Type == Events.CustomerSubscriptionDeleted)
+                {
+                    var subscription = evt.Data.Object as Stripe.Subscription;
+                    if (subscription != null)
                     {
-                        await HandleSubscriptionSessionCompleted(session);
+                        await _coachSubscriptions.UpdateFromSubscriptionEventAsync(
+                            subscription.Id,
+                            subscription.Status,
+                            subscription.CurrentPeriodEnd
+                        );
+                    }
+                }
+                // ✅ NEW: trial ended / renewals / first charge after trial
+                else if (evt.Type == Events.InvoicePaymentSucceeded || evt.Type == Events.InvoicePaid)
+                {
+                    var invoice = evt.Data.Object as Stripe.Invoice;
+                    if (!string.IsNullOrWhiteSpace(invoice?.SubscriptionId))
+                    {
+                        var sub = await new Stripe.SubscriptionService().GetAsync(invoice.SubscriptionId);
+
+                        await _coachSubscriptions.UpdateFromSubscriptionEventAsync(
+                            sub.Id,
+                            sub.Status,
+                            sub.CurrentPeriodEnd
+                        );
+
+                        // Optional: if you want to send a "bill paid" email here later,
+                        // use invoice.HostedInvoiceUrl and invoice.InvoicePdf.
+                    }
+                }
+                // ✅ NEW: payment failed (mark past_due, notify later if you want)
+                else if (evt.Type == Events.InvoicePaymentFailed)
+                {
+                    var invoice = evt.Data.Object as Stripe.Invoice;
+                    if (!string.IsNullOrWhiteSpace(invoice?.SubscriptionId))
+                    {
+                        var sub = await new Stripe.SubscriptionService().GetAsync(invoice.SubscriptionId);
+
+                        await _coachSubscriptions.UpdateFromSubscriptionEventAsync(
+                            sub.Id,
+                            sub.Status,
+                            sub.CurrentPeriodEnd
+                        );
+                    }
+                }
+                else if (evt.Type == "charge.refunded")
+                {
+                    var charge = evt.Data.Object as Charge;
+                    var pi = charge?.PaymentIntentId;
+                    if (!string.IsNullOrWhiteSpace(pi))
+                    {
+                        var gift = await _db.CoachGifts.FirstOrDefaultAsync(g => g.StripePaymentIntentId == pi);
+                        if (gift != null)
+                        {
+                            gift.Status = "refunded";
+                            await _db.SaveChangesAsync();
+                        }
                     }
                 }
             }
-            else if (evt.Type == Events.CustomerSubscriptionCreated ||
-                     evt.Type == Events.CustomerSubscriptionUpdated ||
-                     evt.Type == Events.CustomerSubscriptionDeleted)
+            catch (Exception ex)
             {
-                var subscription = evt.Data.Object as Stripe.Subscription;
-                if (subscription != null)
-                {
-                    await _coachSubscriptions.UpdateFromSubscriptionEventAsync(
-                        subscription.Id,
-                        subscription.Status,
-                        subscription.CurrentPeriodEnd
-                    );
-                }
-            }
-            else if (evt.Type == "charge.refunded")
-            {
-                var charge = evt.Data.Object as Charge;
-                var pi = charge?.PaymentIntentId;
-                if (!string.IsNullOrWhiteSpace(pi))
-                {
-                    var gift = await _db.CoachGifts.FirstOrDefaultAsync(g => g.StripePaymentIntentId == pi);
-                    if (gift != null)
-                    {
-                        gift.Status = "refunded";
-                        await _db.SaveChangesAsync();
-                    }
-                }
+                Console.WriteLine("WEBHOOK handler error: " + ex);
+                return Ok(); // acknowledge to Stripe even if our internal handling failed
             }
 
             return Ok();
