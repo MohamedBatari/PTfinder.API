@@ -52,12 +52,6 @@ namespace PTfinder.API.Controllers
         private static bool TryCoachId(string? s, out int id) =>
             int.TryParse((s ?? "").Trim(), out id);
 
-        // ✅ Simple logger (always visible in Azure Log Stream)
-        private void Log(string msg)
-        {
-            Console.WriteLine($"[BILLING] {DateTime.UtcNow:O} {msg}");
-        }
-
         [HttpGet("debug/db")]
         public IActionResult DbDebug()
         {
@@ -504,12 +498,17 @@ namespace PTfinder.API.Controllers
             }
             catch (StripeException se)
             {
-                Log("WEBHOOK signature fail: " + se.Message);
+                Console.WriteLine("WEBHOOK signature fail: " + se.Message);
                 return BadRequest(new { message = "Signature verification failed", error = se.Message });
             }
 
-            // ✅ always log received event
-            Log($"WEBHOOK RECEIVED: evt={evt.Id} type={evt.Type} live={evt.Livemode}");
+            // --- ✅ Helpful webhook logs ---
+            try
+            {
+                var livemode = evt?.Livemode == true ? "true" : "false";
+                Console.WriteLine($"[BILLING] {DateTime.UtcNow:o} WEBHOOK RECEIVED: evt={evt?.Id} type={evt?.Type} live={livemode}");
+            }
+            catch { /* ignore */ }
 
             // IMPORTANT: never let unhandled exceptions return 500 (Stripe will retry forever)
             try
@@ -517,10 +516,10 @@ namespace PTfinder.API.Controllers
                 if (evt.Type == "checkout.session.completed")
                 {
                     var session = evt.Data.Object as Session;
-                    Log($"BRANCH: checkout.session.completed mode={(session?.Mode ?? "null")} session={session?.Id}");
-
                     if (session != null)
                     {
+                        Console.WriteLine($"[BILLING] {DateTime.UtcNow:o} checkout.session.completed mode={session.Mode} id={session.Id} sub={session.SubscriptionId} pi={session.PaymentIntentId}");
+
                         if (session.Mode == "payment")
                         {
                             await HandleGiftSessionCompleted(session);
@@ -536,10 +535,10 @@ namespace PTfinder.API.Controllers
                          evt.Type == Events.CustomerSubscriptionDeleted)
                 {
                     var subscription = evt.Data.Object as Stripe.Subscription;
-                    Log($"BRANCH: subscription event type={evt.Type} subFromEvent={subscription?.Id} status={subscription?.Status} end={subscription?.CurrentPeriodEnd:O}");
-
                     if (subscription != null)
                     {
+                        Console.WriteLine($"[BILLING] {DateTime.UtcNow:o} subscription event type={evt.Type} sub={subscription.Id} status={subscription.Status} end={subscription.CurrentPeriodEnd:O}");
+
                         await _coachSubscriptions.UpdateFromSubscriptionEventAsync(
                             subscription.Id,
                             subscription.Status,
@@ -547,60 +546,93 @@ namespace PTfinder.API.Controllers
                         );
                     }
                 }
-                // ✅ trial ended / renewals / first charge after trial
+                // ✅ FIXED: invoice events (use invoice.Subscription, not invoice.SubscriptionId)
                 else if (evt.Type == Events.InvoicePaymentSucceeded || evt.Type == Events.InvoicePaid)
                 {
                     var invoice = evt.Data.Object as Stripe.Invoice;
-                    Log($"BRANCH: invoice event type={evt.Type} inv={invoice?.Id} sub={invoice?.SubscriptionId} cust={invoice?.CustomerId} paid={invoice?.AmountPaid}");
 
-                    if (!string.IsNullOrWhiteSpace(invoice?.SubscriptionId))
+                    var invId = invoice?.Id ?? "(null)";
+                    var invSubObj = invoice?.Subscription;         // Subscription object
+                    var invSubIdStr = invoice?.SubscriptionId;     // string id (preferred when available)
+
+                    var invCustId =
+                        invoice?.CustomerId                          // string
+                        ?? invoice?.Customer?.Id;                    // Customer object -> id
+                    var invPaid = invoice?.AmountPaid ?? 0;
+
+                    Console.WriteLine(
+                        $"[BILLING] {DateTime.UtcNow:o} BRANCH: invoice event type={evt.Type} inv={invId} " +
+                        $"subObj={(invSubObj != null ? invSubObj.Id : "(null)")} subId={invSubIdStr} cust={invCustId} paid={invPaid}"
+                    );
+                    // Robust subscription id extraction
+                    var subId =
+    invoice?.SubscriptionId                      // ✅ string
+    ?? invoice?.Subscription?.Id                 // ✅ Subscription object -> id
+    ?? invoice?.Lines?.Data?.FirstOrDefault()?.Subscription
+    ?? (invoice?.Metadata?.TryGetValue("subscription", out var mSub) == true ? mSub : null);
+
+                    if (string.IsNullOrWhiteSpace(subId))
                     {
-                        var sub = await new Stripe.SubscriptionService().GetAsync(invoice.SubscriptionId);
-
-                        Log($"INVOICE->SUB fetched: sub={sub?.Id} status={sub?.Status} end={sub?.CurrentPeriodEnd:O}");
-
-                        // ✅ Update DB
-                        await _coachSubscriptions.UpdateFromSubscriptionEventAsync(
-                            sub.Id,
-                            sub.Status,
-                            sub.CurrentPeriodEnd
-                        );
-
-                        Log("INVOICE: DB update call done");
-
-                        // ✅ Send invoice email
-                        await SendPaidInvoiceEmailAsync(invoice, sub);
-
-                        Log("INVOICE: email send call done");
+                        Console.WriteLine($"[BILLING] {DateTime.UtcNow:o} INVOICE: missing subscription id (invoice={invId}) (skipping)");
+                        return Ok();
                     }
-                    else
-                    {
-                        Log("INVOICE: missing invoice.SubscriptionId (skipping)");
-                    }
+
+                    Console.WriteLine($"[BILLING] {DateTime.UtcNow:o} INVOICE: resolved subscription id => {subId}");
+
+                    var sub = await new Stripe.SubscriptionService().GetAsync(subId);
+
+                    // ✅ Update DB
+                    await _coachSubscriptions.UpdateFromSubscriptionEventAsync(
+                        sub.Id,
+                        sub.Status,
+                        sub.CurrentPeriodEnd
+                    );
+
+                    Console.WriteLine($"[BILLING] {DateTime.UtcNow:o} INVOICE: DB updated sub={sub.Id} status={sub.Status} end={sub.CurrentPeriodEnd:O}");
+
+                    // ✅ Send invoice email
+                    await SendPaidInvoiceEmailAsync(invoice!, sub);
+                    Console.WriteLine($"[BILLING] {DateTime.UtcNow:o} INVOICE: email attempted inv={invId} sub={sub.Id}");
                 }
-                // ✅ payment failed
+                // ✅ payment failed (mark past_due, notify later if you want)
                 else if (evt.Type == Events.InvoicePaymentFailed)
                 {
                     var invoice = evt.Data.Object as Stripe.Invoice;
-                    Log($"BRANCH: invoice FAILED inv={invoice?.Id} sub={invoice?.SubscriptionId}");
 
-                    if (!string.IsNullOrWhiteSpace(invoice?.SubscriptionId))
+                    var invId = invoice?.Id ?? "(null)";
+                    var invSub = invoice?.Subscription; // ✅ correct field
+                    var invSubId = invoice?.SubscriptionId;
+                    var subId =
+    invoice?.SubscriptionId
+    ?? invoice?.Subscription?.Id
+    ?? invoice?.Lines?.Data?.FirstOrDefault()?.Subscription
+    ?? (invoice?.Metadata?.TryGetValue("subscription", out var mSub) == true ? mSub : null);
+
+                    Console.WriteLine($"[BILLING] {DateTime.UtcNow:o} BRANCH: invoice.payment_failed inv={invId} sub(subscription)={invSub} subId(subscriptionId)={invSubId} resolved={subId}");
+
+                    if (!string.IsNullOrWhiteSpace(subId))
                     {
-                        var sub = await new Stripe.SubscriptionService().GetAsync(invoice.SubscriptionId);
+                        var sub = await new Stripe.SubscriptionService().GetAsync(subId);
 
                         await _coachSubscriptions.UpdateFromSubscriptionEventAsync(
                             sub.Id,
                             sub.Status,
                             sub.CurrentPeriodEnd
                         );
+
+                        Console.WriteLine($"[BILLING] {DateTime.UtcNow:o} invoice.payment_failed DB updated sub={sub.Id} status={sub.Status} end={sub.CurrentPeriodEnd:O}");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"[BILLING] {DateTime.UtcNow:o} invoice.payment_failed missing subscription id (invoice={invId})");
                     }
                 }
                 else if (evt.Type == "charge.refunded")
                 {
                     var charge = evt.Data.Object as Charge;
-                    Log($"BRANCH: charge.refunded charge={charge?.Id} pi={charge?.PaymentIntentId}");
-
                     var pi = charge?.PaymentIntentId;
+                    Console.WriteLine($"[BILLING] {DateTime.UtcNow:o} charge.refunded charge={charge?.Id} pi={pi}");
+
                     if (!string.IsNullOrWhiteSpace(pi))
                     {
                         var gift = await _db.CoachGifts.FirstOrDefaultAsync(g => g.StripePaymentIntentId == pi);
@@ -608,19 +640,15 @@ namespace PTfinder.API.Controllers
                         {
                             gift.Status = "refunded";
                             await _db.SaveChangesAsync();
+                            Console.WriteLine($"[BILLING] {DateTime.UtcNow:o} Gift marked refunded giftId={gift.Id} pi={pi}");
                         }
                     }
-                }
-                else
-                {
-                    Log($"BRANCH: ignored evt type={evt.Type}");
                 }
             }
             catch (Exception ex)
             {
-                // ✅ log full exception, but still return 200 to Stripe
-                Log("WEBHOOK handler error FULL: " + ex);
-                return Ok();
+                Console.WriteLine("[BILLING] WEBHOOK handler error: " + ex);
+                return Ok(); // acknowledge to Stripe even if our internal handling failed
             }
 
             return Ok();
@@ -882,11 +910,26 @@ Dashboard: {FrontendBase}/dashboard/gifts
         {
             try
             {
+                // ✅ FIX: Use invoice.Subscription (string) not invoice.SubscriptionId
+                var invSubId =
+    invoice.SubscriptionId
+    ?? invoice.Subscription?.Id
+    ?? invoice.Lines?.Data?.FirstOrDefault()?.Subscription;
+
+                if (string.IsNullOrWhiteSpace(invSubId))
+                {
+                    Console.WriteLine($"[BILLING] {DateTime.UtcNow:o} SendPaidInvoiceEmailAsync: missing subscription id (invoice={invoice?.Id})");
+                    return;
+                }
+
                 var coach = await _db.Coaches.AsNoTracking()
-                    .FirstOrDefaultAsync(c => c.StripeSubscriptionId == invoice.SubscriptionId);
+                    .FirstOrDefaultAsync(c => c.StripeSubscriptionId == invSubId);
 
                 if (coach == null || string.IsNullOrWhiteSpace(coach.Email))
+                {
+                    Console.WriteLine($"[BILLING] {DateTime.UtcNow:o} SendPaidInvoiceEmailAsync: coach not found by StripeSubscriptionId={invSubId} (invoice={invoice?.Id})");
                     return;
+                }
 
                 var currency = (invoice.Currency ?? "aed").ToUpperInvariant();
                 var paid = invoice.AmountPaid / 100m;
@@ -926,6 +969,8 @@ $"\n\nManage subscription: {FrontendBase}/coach/subscription\n- PTfinderNow";
                     textBody: bodyText,
                     tags: new[] { ("Event", "InvoicePaid") }
                 );
+
+                Console.WriteLine($"[BILLING] {DateTime.UtcNow:o} SendPaidInvoiceEmailAsync: email sent/queued to={coach.Email} inv={invoice?.Id} sub={invSubId}");
             }
             catch (Exception ex)
             {
