@@ -551,25 +551,72 @@ namespace PTfinder.API.Controllers
                 {
                     var invoice = evt.Data.Object as Stripe.Invoice;
 
-                    var invId = invoice?.Id ?? "(null)";
-                    var invSubObj = invoice?.Subscription;         // Subscription object
-                    var invSubIdStr = invoice?.SubscriptionId;     // string id (preferred when available)
+                    var invId = invoice?.Id;
+                    if (string.IsNullOrWhiteSpace(invId))
+                    {
+                        Console.WriteLine($"[BILLING] {DateTime.UtcNow:o} INVOICE: missing invoice.Id (skipping)");
+                        return Ok();
+                    }
 
-                    var invCustId =
-                        invoice?.CustomerId                          // string
-                        ?? invoice?.Customer?.Id;                    // Customer object -> id
-                    var invPaid = invoice?.AmountPaid ?? 0;
+                    // ✅ Always refetch invoice from Stripe to ensure SubscriptionId is present
+                    Stripe.Invoice fullInv;
+                    try
+                    {
+                        var invSvc = new InvoiceService();
+                        fullInv = await invSvc.GetAsync(invId, new InvoiceGetOptions
+                        {
+                            Expand = new List<string>
+            {
+                "subscription",
+                "lines.data.subscription"
+            }
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[BILLING] {DateTime.UtcNow:o} INVOICE: failed to refetch invoice={invId} err={ex.Message} (skipping)");
+                        return Ok();
+                    }
+
+                    var custId = fullInv.CustomerId ?? fullInv.Customer?.Id;
+
+                    var subId =
+                        fullInv.SubscriptionId
+                        ?? fullInv.Subscription?.Id
+                        ?? fullInv.Lines?.Data?.FirstOrDefault()?.Subscription;
 
                     Console.WriteLine(
-                        $"[BILLING] {DateTime.UtcNow:o} BRANCH: invoice event type={evt.Type} inv={invId} " +
-                        $"subObj={(invSubObj != null ? invSubObj.Id : "(null)")} subId={invSubIdStr} cust={invCustId} paid={invPaid}"
+                        $"[BILLING] {DateTime.UtcNow:o} INVOICE REFETCHED: inv={invId} subId={subId} cust={custId} paid={fullInv.AmountPaid}"
                     );
-                    // Robust subscription id extraction
-                    var subId =
-    invoice?.SubscriptionId                      // ✅ string
-    ?? invoice?.Subscription?.Id                 // ✅ Subscription object -> id
-    ?? invoice?.Lines?.Data?.FirstOrDefault()?.Subscription
-    ?? (invoice?.Metadata?.TryGetValue("subscription", out var mSub) == true ? mSub : null);
+
+                    // ✅ If STILL missing, fallback: find latest active/trialing subscription by customer
+                    if (string.IsNullOrWhiteSpace(subId) && !string.IsNullOrWhiteSpace(custId))
+                    {
+                        try
+                        {
+                            var subList = await new Stripe.SubscriptionService().ListAsync(new SubscriptionListOptions
+                            {
+                                Customer = custId,
+                                Status = "all",
+                                Limit = 5
+                            });
+
+                            // pick the most recent non-canceled subscription
+                            var best = subList.Data
+                                .OrderByDescending(s => s.Created)
+                                .FirstOrDefault(s => !string.Equals(s.Status, "canceled", StringComparison.OrdinalIgnoreCase));
+
+                            subId = best?.Id;
+
+                            Console.WriteLine(
+                                $"[BILLING] {DateTime.UtcNow:o} SUB FALLBACK: cust={custId} pickedSub={subId} status={best?.Status}"
+                            );
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"[BILLING] {DateTime.UtcNow:o} SUB FALLBACK FAILED: cust={custId} err={ex.Message}");
+                        }
+                    }
 
                     if (string.IsNullOrWhiteSpace(subId))
                     {
@@ -577,23 +624,18 @@ namespace PTfinder.API.Controllers
                         return Ok();
                     }
 
-                    Console.WriteLine($"[BILLING] {DateTime.UtcNow:o} INVOICE: resolved subscription id => {subId}");
-
+                    // ✅ Now safe
                     var sub = await new Stripe.SubscriptionService().GetAsync(subId);
 
-                    // ✅ Update DB
                     await _coachSubscriptions.UpdateFromSubscriptionEventAsync(
                         sub.Id,
                         sub.Status,
                         sub.CurrentPeriodEnd
                     );
 
-                    Console.WriteLine($"[BILLING] {DateTime.UtcNow:o} INVOICE: DB updated sub={sub.Id} status={sub.Status} end={sub.CurrentPeriodEnd:O}");
-
-                    // ✅ Send invoice email
-                    await SendPaidInvoiceEmailAsync(invoice!, sub);
-                    Console.WriteLine($"[BILLING] {DateTime.UtcNow:o} INVOICE: email attempted inv={invId} sub={sub.Id}");
+                    await SendPaidInvoiceEmailAsync(fullInv, sub);
                 }
+                
                 // ✅ payment failed (mark past_due, notify later if you want)
                 else if (evt.Type == Events.InvoicePaymentFailed)
                 {
