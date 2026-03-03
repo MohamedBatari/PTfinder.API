@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -10,8 +11,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using PTfinder.API.DATA;
 using PTfinder.API.DATA.Modules;
-using PTfinder.API.Services;      // IEmailSender + ICoachSubscriptionService
-using PTfinder.API.Settings;     // StripeSettings
+using PTfinder.API.Services;
+using PTfinder.API.Settings;
 using Stripe;
 using Stripe.Checkout;
 
@@ -63,7 +64,6 @@ namespace PTfinder.API.Controllers
             });
         }
 
-        // ---------- Quick probe ----------
         [HttpGet("debug/stripe")]
         public ActionResult<object> StripeDebug()
         {
@@ -77,7 +77,6 @@ namespace PTfinder.API.Controllers
 
         public class ConnectAccountRequest { public string? CoachId { get; set; } }
 
-        // POST /api/Billing/connect/account
         [HttpPost("connect/account")]
         public async Task<ActionResult<object>> CreateOrFetchConnectAccount([FromBody] ConnectAccountRequest body)
         {
@@ -153,7 +152,6 @@ namespace PTfinder.API.Controllers
             }
         }
 
-        // POST /api/Billing/connect/account-link
         [HttpPost("connect/account-link")]
         public async Task<IActionResult> CreateAccountLink([FromBody] ConnectAccountRequest body)
         {
@@ -199,7 +197,6 @@ namespace PTfinder.API.Controllers
             return Ok(new { url = link.Url });
         }
 
-        // POST /api/Billing/connect/login-link
         [HttpPost("connect/login-link")]
         public async Task<IActionResult> CreateLoginLink([FromBody] ConnectAccountRequest body)
         {
@@ -216,7 +213,6 @@ namespace PTfinder.API.Controllers
             return Ok(new { url = link.Url });
         }
 
-        // GET /api/Billing/connect/status/{coachId}
         [HttpGet("connect/status/{coachId}")]
         public async Task<ActionResult<object>> ConnectStatus([FromRoute] string coachId)
         {
@@ -234,11 +230,9 @@ namespace PTfinder.API.Controllers
                 var svc = new AccountService();
                 var acct = await svc.GetAsync(coach.StripeAccountId);
 
-                // ✅ Sync Stripe flags into your DB
                 coach.StripeChargesEnabled = acct.ChargesEnabled;
                 coach.StripePayoutsEnabled = acct.PayoutsEnabled;
                 coach.StripeDetailsSubmitted = acct.DetailsSubmitted;
-
                 await _db.SaveChangesAsync();
 
                 var req = acct.Requirements;
@@ -280,7 +274,7 @@ namespace PTfinder.API.Controllers
         }
 
         // =====================================================================
-        // SUBSCRIPTIONS: PTfinderNow Basic / Pro
+        // SUBSCRIPTIONS
         // =====================================================================
 
         [HttpPost("subscription/checkout")]
@@ -291,31 +285,19 @@ namespace PTfinder.API.Controllers
         {
             if (req == null || req.CoachId <= 0 || string.IsNullOrWhiteSpace(req.Plan))
             {
-                return BadRequest(new SubscriptionCheckoutResponse
-                {
-                    Message = "Invalid request."
-                });
+                return BadRequest(new SubscriptionCheckoutResponse { Message = "Invalid request." });
             }
 
             var plan = req.Plan.ToLower().Trim();
             string? priceId = null;
 
             if (plan == "basic")
-            {
                 priceId = req.Yearly ? _stripeSettings.BasicYearlyPriceId : _stripeSettings.BasicMonthlyPriceId;
-            }
             else if (plan == "pro")
-            {
                 priceId = req.Yearly ? _stripeSettings.ProYearlyPriceId : _stripeSettings.ProMonthlyPriceId;
-            }
 
             if (string.IsNullOrEmpty(priceId))
-            {
-                return BadRequest(new SubscriptionCheckoutResponse
-                {
-                    Message = "Invalid plan or billing period."
-                });
-            }
+                return BadRequest(new SubscriptionCheckoutResponse { Message = "Invalid plan or billing period." });
 
             var successUrl = _stripeSettings.SuccessUrl
                 ?? $"{FrontendBase}/coach/subscription/success?session_id={{CHECKOUT_SESSION_ID}}";
@@ -331,11 +313,7 @@ namespace PTfinder.API.Controllers
                 PaymentMethodTypes = new List<string> { "card" },
                 LineItems = new List<SessionLineItemOptions>
                 {
-                    new SessionLineItemOptions
-                    {
-                        Price = priceId,
-                        Quantity = 1
-                    }
+                    new SessionLineItemOptions { Price = priceId, Quantity = 1 }
                 },
                 ClientReferenceId = req.CoachId.ToString(),
                 Metadata = new Dictionary<string, string>
@@ -353,15 +331,11 @@ namespace PTfinder.API.Controllers
             var svc = new SessionService();
             var session = await svc.CreateAsync(options);
 
-            return Ok(new SubscriptionCheckoutResponse
-            {
-                Url = session.Url,
-                Message = "Checkout created"
-            });
+            return Ok(new SubscriptionCheckoutResponse { Url = session.Url, Message = "Checkout created" });
         }
 
         // =====================================================================
-        // Gifts checkout: destination charges (platform fee + payout to coach)
+        // Gifts checkout
         // =====================================================================
 
         [HttpPost("gift/checkout")]
@@ -401,7 +375,7 @@ namespace PTfinder.API.Controllers
                 var productName = $"Gift to {(string.IsNullOrWhiteSpace(req.CoachName) ? "Coach" : req.CoachName)} (#{coachIdInt})";
 
                 long amountMinor = (long)Math.Round(req.Amount * 100m);
-                long appFee = (long)Math.Round(amountMinor * 0.20m); // 20% platform fee
+                long appFee = (long)Math.Round(amountMinor * 0.20m);
 
                 var options = new SessionCreateOptions
                 {
@@ -470,7 +444,7 @@ namespace PTfinder.API.Controllers
         }
 
         // =====================================================================
-        // Webhook: gifts + subscriptions
+        // Webhook
         // =====================================================================
 
         [AllowAnonymous]
@@ -502,15 +476,13 @@ namespace PTfinder.API.Controllers
                 return BadRequest(new { message = "Signature verification failed", error = se.Message });
             }
 
-            // --- ✅ Helpful webhook logs ---
             try
             {
                 var livemode = evt?.Livemode == true ? "true" : "false";
                 Console.WriteLine($"[BILLING] {DateTime.UtcNow:o} WEBHOOK RECEIVED: evt={evt?.Id} type={evt?.Type} live={livemode}");
             }
-            catch { /* ignore */ }
+            catch { }
 
-            // IMPORTANT: never let unhandled exceptions return 500 (Stripe will retry forever)
             try
             {
                 if (evt.Type == "checkout.session.completed")
@@ -521,13 +493,9 @@ namespace PTfinder.API.Controllers
                         Console.WriteLine($"[BILLING] {DateTime.UtcNow:o} checkout.session.completed mode={session.Mode} id={session.Id} sub={session.SubscriptionId} pi={session.PaymentIntentId}");
 
                         if (session.Mode == "payment")
-                        {
                             await HandleGiftSessionCompleted(session);
-                        }
                         else if (session.Mode == "subscription")
-                        {
                             await HandleSubscriptionSessionCompleted(session);
-                        }
                     }
                 }
                 else if (evt.Type == Events.CustomerSubscriptionCreated ||
@@ -546,9 +514,9 @@ namespace PTfinder.API.Controllers
                         );
                     }
                 }
-                // ✅ FIXED: invoice events (use invoice.Subscription, not invoice.SubscriptionId)
                 else if (evt.Type == Events.InvoicePaymentSucceeded || evt.Type == Events.InvoicePaid)
                 {
+                    // ✅ DO NOT refetch invoice (Stripe.NET may fail deserializing on your API version)
                     var invoice = evt.Data.Object as Stripe.Invoice;
 
                     var invId = invoice?.Id;
@@ -558,38 +526,23 @@ namespace PTfinder.API.Controllers
                         return Ok();
                     }
 
-                    // ✅ Always refetch invoice from Stripe to ensure SubscriptionId is present
-                    Stripe.Invoice fullInv;
-                    try
-                    {
-                        var invSvc = new InvoiceService();
-                        fullInv = await invSvc.GetAsync(invId, new InvoiceGetOptions
-                        {
-                            Expand = new List<string>
-            {
-                "subscription",
-                "lines.data.subscription"
-            }
-                        });
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"[BILLING] {DateTime.UtcNow:o} INVOICE: failed to refetch invoice={invId} err={ex.Message} (skipping)");
-                        return Ok();
-                    }
+                    // ✅ FIX compile issues: always use .Id when mixing objects
+                    var custId = invoice?.CustomerId ?? invoice?.Customer?.Id;
 
-                    var custId = fullInv.CustomerId ?? fullInv.Customer?.Id;
+                    // try direct properties first
+                    var subId = invoice?.SubscriptionId ?? invoice?.Subscription?.Id;
 
-                    var subId =
-                        fullInv.SubscriptionId
-                        ?? fullInv.Subscription?.Id
-                        ?? fullInv.Lines?.Data?.FirstOrDefault()?.Subscription;
+                    // if missing, extract from raw JSON (robust against new invoice shapes)
+                    if (string.IsNullOrWhiteSpace(subId))
+                    {
+                        subId = ExtractSubscriptionIdFromInvoiceJson(json);
+                    }
 
                     Console.WriteLine(
-                        $"[BILLING] {DateTime.UtcNow:o} INVOICE REFETCHED: inv={invId} subId={subId} cust={custId} paid={fullInv.AmountPaid}"
+                        $"[BILLING] {DateTime.UtcNow:o} BRANCH: invoice event type={evt.Type} inv={invId} subId={subId} cust={custId} paid={invoice?.AmountPaid}"
                     );
 
-                    // ✅ If STILL missing, fallback: find latest active/trialing subscription by customer
+                    // fallback: list subscriptions by customer
                     if (string.IsNullOrWhiteSpace(subId) && !string.IsNullOrWhiteSpace(custId))
                     {
                         try
@@ -601,16 +554,13 @@ namespace PTfinder.API.Controllers
                                 Limit = 5
                             });
 
-                            // pick the most recent non-canceled subscription
                             var best = subList.Data
                                 .OrderByDescending(s => s.Created)
                                 .FirstOrDefault(s => !string.Equals(s.Status, "canceled", StringComparison.OrdinalIgnoreCase));
 
                             subId = best?.Id;
 
-                            Console.WriteLine(
-                                $"[BILLING] {DateTime.UtcNow:o} SUB FALLBACK: cust={custId} pickedSub={subId} status={best?.Status}"
-                            );
+                            Console.WriteLine($"[BILLING] {DateTime.UtcNow:o} SUB FALLBACK: cust={custId} pickedSub={subId} status={best?.Status}");
                         }
                         catch (Exception ex)
                         {
@@ -624,7 +574,7 @@ namespace PTfinder.API.Controllers
                         return Ok();
                     }
 
-                    // ✅ Now safe
+                    // subscription fetch usually deserializes fine
                     var sub = await new Stripe.SubscriptionService().GetAsync(subId);
 
                     await _coachSubscriptions.UpdateFromSubscriptionEventAsync(
@@ -633,24 +583,19 @@ namespace PTfinder.API.Controllers
                         sub.CurrentPeriodEnd
                     );
 
-                    await SendPaidInvoiceEmailAsync(fullInv, sub);
+                    await SendPaidInvoiceEmailAsync(invoice!, sub);
                 }
-
-                // ✅ payment failed (mark past_due, notify later if you want)
                 else if (evt.Type == Events.InvoicePaymentFailed)
                 {
                     var invoice = evt.Data.Object as Stripe.Invoice;
-
                     var invId = invoice?.Id ?? "(null)";
-                    var invSub = invoice?.Subscription; // ✅ correct field
-                    var invSubId = invoice?.SubscriptionId;
-                    var subId =
-    invoice?.SubscriptionId
-    ?? invoice?.Subscription?.Id
-    ?? invoice?.Lines?.Data?.FirstOrDefault()?.Subscription
-    ?? (invoice?.Metadata?.TryGetValue("subscription", out var mSub) == true ? mSub : null);
+                    var custId = invoice?.CustomerId ?? invoice?.Customer?.Id;
 
-                    Console.WriteLine($"[BILLING] {DateTime.UtcNow:o} BRANCH: invoice.payment_failed inv={invId} sub(subscription)={invSub} subId(subscriptionId)={invSubId} resolved={subId}");
+                    var subId = invoice?.SubscriptionId ?? invoice?.Subscription?.Id;
+                    if (string.IsNullOrWhiteSpace(subId))
+                        subId = ExtractSubscriptionIdFromInvoiceJson(json);
+
+                    Console.WriteLine($"[BILLING] {DateTime.UtcNow:o} BRANCH: invoice.payment_failed inv={invId} subId={subId} cust={custId}");
 
                     if (!string.IsNullOrWhiteSpace(subId))
                     {
@@ -690,21 +635,91 @@ namespace PTfinder.API.Controllers
             catch (Exception ex)
             {
                 Console.WriteLine("[BILLING] WEBHOOK handler error: " + ex);
-                return Ok(); // acknowledge to Stripe even if our internal handling failed
+                return Ok();
             }
 
             return Ok();
         }
 
         // =====================================================================
-        // UPDATED: Trial email vs Active email
+        // Helpers (JSON extraction: resilient to new invoice shapes)
+        // =====================================================================
+
+        private static string? ExtractSubscriptionIdFromInvoiceJson(string json)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+                var root = doc.RootElement;
+
+                // event.data.object
+                if (!root.TryGetProperty("data", out var data)) return null;
+                if (!data.TryGetProperty("object", out var obj)) return null;
+
+                // common paths:
+                // 1) object.subscription = "sub_..." OR { id: "sub_..." }
+                var sub = TryGetStringOrId(obj, "subscription");
+                if (!string.IsNullOrWhiteSpace(sub)) return sub;
+
+                // 2) object.parent.subscription_details.subscription
+                if (obj.TryGetProperty("parent", out var parent) &&
+                    parent.TryGetProperty("subscription_details", out var sd) &&
+                    sd.TryGetProperty("subscription", out var ssub) &&
+                    ssub.ValueKind == JsonValueKind.String)
+                {
+                    var v = ssub.GetString();
+                    if (!string.IsNullOrWhiteSpace(v)) return v;
+                }
+
+                // 3) object.lines.data[0].parent.subscription_item_details.subscription
+                if (obj.TryGetProperty("lines", out var lines) &&
+                    lines.TryGetProperty("data", out var arr) &&
+                    arr.ValueKind == JsonValueKind.Array &&
+                    arr.GetArrayLength() > 0)
+                {
+                    var li0 = arr[0];
+
+                    var liSub = TryGetStringOrId(li0, "subscription");
+                    if (!string.IsNullOrWhiteSpace(liSub)) return liSub;
+
+                    if (li0.TryGetProperty("parent", out var liParent) &&
+                        liParent.TryGetProperty("subscription_item_details", out var sid) &&
+                        sid.TryGetProperty("subscription", out var sidSub) &&
+                        sidSub.ValueKind == JsonValueKind.String)
+                    {
+                        var v = sidSub.GetString();
+                        if (!string.IsNullOrWhiteSpace(v)) return v;
+                    }
+                }
+            }
+            catch
+            {
+                // ignore
+            }
+
+            return null;
+        }
+
+        private static string? TryGetStringOrId(JsonElement obj, string prop)
+        {
+            if (!obj.TryGetProperty(prop, out var el)) return null;
+
+            if (el.ValueKind == JsonValueKind.String)
+                return el.GetString();
+
+            if (el.ValueKind == JsonValueKind.Object && el.TryGetProperty("id", out var idEl) && idEl.ValueKind == JsonValueKind.String)
+                return idEl.GetString();
+
+            return null;
+        }
+
+        // =====================================================================
+        // Subscription checkout completion email (trial vs active)
         // =====================================================================
 
         private async Task HandleSubscriptionSessionCompleted(Session session)
         {
-            var plan = session.Metadata != null && session.Metadata.TryGetValue("plan", out var p)
-                ? p
-                : "basic";
+            var plan = session.Metadata != null && session.Metadata.TryGetValue("plan", out var p) ? p : "basic";
 
             var coachIdString = session.ClientReferenceId ?? "0";
             var subscriptionId = session.SubscriptionId;
@@ -716,7 +731,6 @@ namespace PTfinder.API.Controllers
             var subSvc = new Stripe.SubscriptionService();
             var sub = await subSvc.GetAsync(subscriptionId);
 
-            // 1) Update internal subscription state (your service)
             await _coachSubscriptions.HandleCheckoutCompletedAsync(
                 coachIdString,
                 plan,
@@ -725,13 +739,10 @@ namespace PTfinder.API.Controllers
                 sub.CurrentPeriodEnd
             );
 
-            // 2) Email coach (trial email OR active email)
             if (!int.TryParse(coachIdString, out var coachIdInt))
                 return;
 
-            var coach = await _db.Coaches.AsNoTracking()
-                .FirstOrDefaultAsync(c => c.Id == coachIdInt);
-
+            var coach = await _db.Coaches.AsNoTracking().FirstOrDefaultAsync(c => c.Id == coachIdInt);
             if (coach == null || string.IsNullOrWhiteSpace(coach.Email))
                 return;
 
@@ -745,10 +756,7 @@ namespace PTfinder.API.Controllers
                     invoice = await invSvc.GetAsync(latestInvoiceId);
                 }
             }
-            catch
-            {
-                // ignore invoice fetch errors
-            }
+            catch { }
 
             var firstItem = sub.Items?.Data?.FirstOrDefault();
             var price = firstItem?.Price;
@@ -866,13 +874,13 @@ $"\n\nManage your subscription: {FrontendBase}/coach/subscription\n- PTfinderNow
             if (string.IsNullOrWhiteSpace(coachIdStr) && !string.IsNullOrWhiteSpace(session.PaymentIntentId))
             {
                 try { pi = await new PaymentIntentService().GetAsync(session.PaymentIntentId); }
-                catch { /* ignore */ }
+                catch { }
                 if (pi?.Metadata?.TryGetValue("coachId", out var v2) == true) coachIdStr = v2;
             }
             else if (!string.IsNullOrWhiteSpace(session.PaymentIntentId))
             {
                 try { pi = await new PaymentIntentService().GetAsync(session.PaymentIntentId); }
-                catch { /* ignore */ }
+                catch { }
             }
 
             if (!int.TryParse(coachIdStr, out var coachIdInt))
@@ -906,12 +914,7 @@ $"\n\nManage your subscription: {FrontendBase}/coach/subscription\n- PTfinderNow
                 var coach = await _db.Coaches.AsNoTracking().FirstOrDefaultAsync(c => c.Id == coachIdInt);
                 if (coach != null && !string.IsNullOrWhiteSpace(coach.Email))
                 {
-                    long feeMinor = 0;
-                    if (pi != null && pi.ApplicationFeeAmount.HasValue)
-                        feeMinor = pi.ApplicationFeeAmount.Value;
-                    else
-                        feeMinor = (long)Math.Round(amountMinor * 0.20m);
-
+                    long feeMinor = (pi?.ApplicationFeeAmount).GetValueOrDefault((long)Math.Round(amountMinor * 0.20m));
                     var netMinor = Math.Max(0, amountMinor - feeMinor);
                     var gross = amountMinor / 100m;
                     var net = netMinor / 100m;
@@ -952,11 +955,8 @@ Dashboard: {FrontendBase}/dashboard/gifts
         {
             try
             {
-                // ✅ FIX: Use invoice.Subscription (string) not invoice.SubscriptionId
-                var invSubId =
-    invoice.SubscriptionId
-    ?? invoice.Subscription?.Id
-    ?? invoice.Lines?.Data?.FirstOrDefault()?.Subscription;
+                // ✅ FIX compile: always resolve to string
+                var invSubId = invoice.SubscriptionId ?? invoice.Subscription?.Id;
 
                 if (string.IsNullOrWhiteSpace(invSubId))
                 {
