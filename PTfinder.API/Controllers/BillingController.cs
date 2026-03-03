@@ -635,7 +635,7 @@ namespace PTfinder.API.Controllers
 
                     await SendPaidInvoiceEmailAsync(fullInv, sub);
                 }
-                
+
                 // ✅ payment failed (mark past_due, notify later if you want)
                 else if (evt.Type == Events.InvoicePaymentFailed)
                 {
