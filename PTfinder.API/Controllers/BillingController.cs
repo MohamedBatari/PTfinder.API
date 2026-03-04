@@ -507,11 +507,7 @@ namespace PTfinder.API.Controllers
                     {
                         Console.WriteLine($"[BILLING] {DateTime.UtcNow:o} subscription event type={evt.Type} sub={subscription.Id} status={subscription.Status} end={subscription.CurrentPeriodEnd:O}");
 
-                        await _coachSubscriptions.UpdateFromSubscriptionEventAsync(
-                            subscription.Id,
-                            subscription.Status,
-                            subscription.CurrentPeriodEnd
-                        );
+                        await _coachSubscriptions.UpdateFromSubscriptionEventAsync(subscription);
                     }
                 }
                 else if (evt.Type == Events.InvoicePaymentSucceeded || evt.Type == Events.InvoicePaid)
@@ -577,12 +573,7 @@ namespace PTfinder.API.Controllers
                     // subscription fetch usually deserializes fine
                     var sub = await new Stripe.SubscriptionService().GetAsync(subId);
 
-                    await _coachSubscriptions.UpdateFromSubscriptionEventAsync(
-                        sub.Id,
-                        sub.Status,
-                        sub.CurrentPeriodEnd
-                    );
-
+                    await _coachSubscriptions.UpdateFromSubscriptionEventAsync(sub);
                     await SendPaidInvoiceEmailAsync(invoice!, sub);
                 }
                 else if (evt.Type == Events.InvoicePaymentFailed)
@@ -601,11 +592,7 @@ namespace PTfinder.API.Controllers
                     {
                         var sub = await new Stripe.SubscriptionService().GetAsync(subId);
 
-                        await _coachSubscriptions.UpdateFromSubscriptionEventAsync(
-                            sub.Id,
-                            sub.Status,
-                            sub.CurrentPeriodEnd
-                        );
+                        await _coachSubscriptions.UpdateFromSubscriptionEventAsync(sub);
 
                         Console.WriteLine($"[BILLING] {DateTime.UtcNow:o} invoice.payment_failed DB updated sub={sub.Id} status={sub.Status} end={sub.CurrentPeriodEnd:O}");
                     }

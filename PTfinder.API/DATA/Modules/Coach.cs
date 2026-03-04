@@ -83,6 +83,8 @@ namespace PTfinder.API.DATA.Modules
         public DateTime? SubscriptionStartedAtUtc { get; set; }
         public DateTime? SubscriptionExpiresAtUtc { get; set; }
 
+        public bool CancelAtPeriodEnd { get; set; }
+        public DateTime? CanceledAtUtc { get; set; }
         // Stripe linkage for freelancers (Partner coaches will use Partner’s Stripe fields)
         public string? StripeCustomerId { get; set; }
         public string? StripeSubscriptionId { get; set; }

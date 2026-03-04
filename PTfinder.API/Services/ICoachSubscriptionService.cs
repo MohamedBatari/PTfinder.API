@@ -13,9 +13,6 @@ namespace PTfinder.API.Services
             string stripeSubscriptionId,
             DateTime? currentPeriodEndUtc);
 
-        Task UpdateFromSubscriptionEventAsync(
-            string stripeSubscriptionId,
-            string status,
-            DateTime? currentPeriodEndUtc);
+        Task UpdateFromSubscriptionEventAsync(Stripe.Subscription subscription);
     }
 }

@@ -1,19 +1,24 @@
-﻿// PTfinder.API/Services/CoachSubscriptionService.cs
-using System;
+﻿using System;
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using PTfinder.API.DATA;
 using PTfinder.API.DATA.Modules;
+using PTfinder.API.Settings;
+using Stripe;
 
 namespace PTfinder.API.Services
 {
     public class CoachSubscriptionService : ICoachSubscriptionService
     {
         private readonly AppDbContext _db;
+        private readonly StripeSettings _stripe;
 
-        public CoachSubscriptionService(AppDbContext db)
+        public CoachSubscriptionService(AppDbContext db, IOptions<StripeSettings> stripeOptions)
         {
             _db = db;
+            _stripe = stripeOptions.Value;
         }
 
         public async Task HandleCheckoutCompletedAsync(
@@ -37,7 +42,7 @@ namespace PTfinder.API.Services
             coach.SubscriptionTier = (plan ?? "").Trim().ToLowerInvariant() switch
             {
                 "basic" => SubscriptionTier.Basic,
-                "pro" => SubscriptionTier.Standard,   // pro == standard in your enum
+                "pro" => SubscriptionTier.Standard,
                 "standard" => SubscriptionTier.Standard,
                 _ => SubscriptionTier.None
             };
@@ -48,62 +53,86 @@ namespace PTfinder.API.Services
             coach.SubscriptionStartedAtUtc ??= now;
 
             var end = NormalizeUtc(currentPeriodEndUtc);
-
-            // ✅ never save 1970 / nonsense
             if (IsValidEnd(end))
             {
                 coach.CurrentPeriodEndUtc = end;
                 coach.SubscriptionExpiresAtUtc = end;
             }
 
+            // new checkout = active intent
+            coach.CancelAtPeriodEnd = false;
+            coach.CanceledAtUtc = null;
+
             coach.UpdatedAtUtc = now;
             await _db.SaveChangesAsync();
         }
 
-        public async Task UpdateFromSubscriptionEventAsync(
-            string stripeSubscriptionId,
-            string status,
-            DateTime? currentPeriodEndUtc)
+        // ✅ NEW: takes full Stripe.Subscription
+        public async Task UpdateFromSubscriptionEventAsync(Stripe.Subscription sub)
         {
-            if (string.IsNullOrWhiteSpace(stripeSubscriptionId)) return;
+            if (sub == null || string.IsNullOrWhiteSpace(sub.Id)) return;
 
-            var coach = await _db.Coaches
-                .FirstOrDefaultAsync(c => c.StripeSubscriptionId == stripeSubscriptionId);
-
+            var coach = await _db.Coaches.FirstOrDefaultAsync(c => c.StripeSubscriptionId == sub.Id);
             if (coach == null) return;
 
-            var s = (status ?? "").Trim().ToLowerInvariant();
-
+            // 1) status mapping
+            var s = (sub.Status ?? "").Trim().ToLowerInvariant();
             coach.SubscriptionStatus = s switch
             {
                 "active" => SubscriptionStatus.Active,
                 "trialing" => SubscriptionStatus.Active,
                 "past_due" => SubscriptionStatus.PastDue,
                 "unpaid" => SubscriptionStatus.PastDue,
-                "canceled" => SubscriptionStatus.Canceled,
+                "canceled" => SubscriptionStatus.Inactive,
                 "incomplete" => SubscriptionStatus.Inactive,
                 "incomplete_expired" => SubscriptionStatus.Inactive,
                 _ => SubscriptionStatus.Inactive
             };
 
-            // ✅ your Search() requires IsActive
-            coach.IsActive = coach.SubscriptionStatus == SubscriptionStatus.Active;
+            if (coach.SubscriptionStatus == SubscriptionStatus.Inactive)
+            {
+                coach.SubscriptionTier = SubscriptionTier.None;
+            }
 
-            var end = NormalizeUtc(currentPeriodEndUtc);
+            coach.IsActive = true;
 
-            // ✅ do NOT overwrite good dates with 1970
+            // 2) end dates
+            var end = NormalizeUtc(sub.CurrentPeriodEnd);
             if (IsValidEnd(end))
             {
                 coach.CurrentPeriodEndUtc = end;
                 coach.SubscriptionExpiresAtUtc = end;
             }
 
+            // 3) cancel scheduling (this is what you were missing)
+            coach.CancelAtPeriodEnd = sub.CancelAtPeriodEnd;
+            coach.CanceledAtUtc = NormalizeUtc(sub.CanceledAt);
+
+            // 4) update tier based on the current price id (UPGRADE/DOWNGRADE FIX)
+            var priceId = sub.Items?.Data?.FirstOrDefault()?.Price?.Id;
+
+            // ✅ Only set tier from price if subscription is NOT inactive
+            if (coach.SubscriptionStatus != SubscriptionStatus.Inactive && !string.IsNullOrWhiteSpace(priceId))
+            {
+                coach.SubscriptionTier = MapTierFromPriceId(priceId);
+                coach.SubscriptionExpiresAtUtc = coach.CurrentPeriodEndUtc;
+            }
+
             coach.UpdatedAtUtc = DateTime.UtcNow;
             await _db.SaveChangesAsync();
 
-            Console.WriteLine($"SERVICE UpdateFromSubscriptionEventAsync: sub={stripeSubscriptionId} status={status} end={currentPeriodEndUtc:O}");
-            await _db.SaveChangesAsync();
-            Console.WriteLine("SERVICE SaveChanges OK");
+            Console.WriteLine($"SERVICE UpdateFromSubscriptionEventAsync: sub={sub.Id} status={sub.Status} cancelAtPeriodEnd={sub.CancelAtPeriodEnd} price={priceId} end={sub.CurrentPeriodEnd:O}");
+        }
+
+        private SubscriptionTier MapTierFromPriceId(string priceId)
+        {
+            if (priceId == _stripe.BasicMonthlyPriceId || priceId == _stripe.BasicYearlyPriceId)
+                return SubscriptionTier.Basic;
+
+            if (priceId == _stripe.ProMonthlyPriceId || priceId == _stripe.ProYearlyPriceId)
+                return SubscriptionTier.Standard;
+
+            return SubscriptionTier.None;
         }
 
         private static DateTime? NormalizeUtc(DateTime? dt)
@@ -119,12 +148,7 @@ namespace PTfinder.API.Services
         private static bool IsValidEnd(DateTime? dt)
         {
             if (!dt.HasValue) return false;
-
-            // reject epoch / nonsense values
             return dt.Value >= new DateTime(2001, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         }
     }
 }
-
-
-
