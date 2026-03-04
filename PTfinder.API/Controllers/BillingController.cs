@@ -332,6 +332,84 @@ namespace PTfinder.API.Controllers
 
             return Ok(new SubscriptionCheckoutResponse { Url = session.Url, Message = "Checkout created" });
         }
+        // =====================
+        // CANCEL SUBSCRIPTION
+        // =====================
+
+        // Request body from frontend
+        public class CancelSubscriptionRequest
+        {
+            public int CoachId { get; set; }
+            // optional: if later you want "cancel now"
+            public bool CancelNow { get; set; } = false;
+        }
+
+        [HttpPost("subscription/cancel")]
+        [Consumes("application/json")]
+        [Produces("application/json")]
+        // If your API is protected with JWT, keep this.
+        // If not using auth now, you can remove [Authorize].
+        [Authorize]
+        public async Task<IActionResult> CancelSubscription([FromBody] CancelSubscriptionRequest req)
+        {
+            try
+            {
+                if (req == null || req.CoachId <= 0)
+                    return BadRequest(new { message = "Invalid request. { coachId } is required." });
+
+                var coach = await _db.Coaches.FirstOrDefaultAsync(c => c.Id == req.CoachId);
+                if (coach == null)
+                    return NotFound(new { message = "Coach not found." });
+
+                if (string.IsNullOrWhiteSpace(coach.StripeSubscriptionId))
+                    return BadRequest(new { message = "No active Stripe subscription found for this coach." });
+
+                var subSvc = new Stripe.SubscriptionService();
+
+                Stripe.Subscription updatedSub;
+
+                if (req.CancelNow)
+                {
+                    // Cancel immediately (rarely used)
+                    updatedSub = await subSvc.CancelAsync(coach.StripeSubscriptionId);
+                }
+                else
+                {
+                    // ✅ Recommended: cancel at period end (coach keeps access until end date)
+                    updatedSub = await subSvc.UpdateAsync(coach.StripeSubscriptionId, new SubscriptionUpdateOptions
+                    {
+                        CancelAtPeriodEnd = true
+                    });
+                }
+
+                // ✅ Update DB using your centralized mapping logic
+                await _coachSubscriptions.UpdateFromSubscriptionEventAsync(updatedSub);
+
+                return Ok(new
+                {
+                    message = req.CancelNow ? "Subscription canceled immediately." : "Subscription will cancel at period end.",
+                    stripeSubscriptionId = updatedSub.Id,
+                    status = updatedSub.Status,
+                    cancelAtPeriodEnd = updatedSub.CancelAtPeriodEnd,
+                    currentPeriodEndUtc = updatedSub.CurrentPeriodEnd
+                });
+            }
+            catch (StripeException se)
+            {
+                return StatusCode(502, new
+                {
+                    message = "Stripe error canceling subscription",
+                    type = se.StripeError?.Type,
+                    code = se.StripeError?.Code,
+                    param = se.StripeError?.Param,
+                    error = se.StripeError?.Message ?? se.Message
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Server error canceling subscription", error = ex.Message });
+            }
+        }
 
         // =====================================================================
         // Gifts checkout
