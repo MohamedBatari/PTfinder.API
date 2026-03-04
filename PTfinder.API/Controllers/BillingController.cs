@@ -776,6 +776,55 @@ namespace PTfinder.API.Controllers
 
             return null;
         }
+        private async Task SendSubscriptionCanceledEmailAsync(Coach coach, Stripe.Subscription sub)
+        {
+            try
+            {
+                if (coach == null || string.IsNullOrWhiteSpace(coach.Email)) return;
+
+                var end = sub.CurrentPeriodEnd;
+                var endText = end.ToString("yyyy-MM-dd");
+
+                var subject = "⚠️ PTfinderNow subscription cancellation scheduled";
+
+                var bodyHtml = $@"
+<p>Hi <b>{coach.FullName ?? "Coach"}</b>,</p>
+<p>Your subscription cancellation has been scheduled.</p>
+<ul>
+  <li><b>Cancel at period end:</b> {(sub.CancelAtPeriodEnd ? "Yes" : "No")}</li>
+  <li><b>Access until:</b> {endText}</li>
+</ul>
+<p>You will keep access until the date above. After that, your profile will require an active subscription.</p>
+<p>Manage your subscription: <a href=""{FrontendBase}/coach/subscription"">{FrontendBase}/coach/subscription</a></p>
+<p>- PTfinderNow</p>";
+
+                var bodyText = $@"Hi {coach.FullName ?? "Coach"},
+
+Your subscription cancellation has been scheduled.
+
+Cancel at period end: {(sub.CancelAtPeriodEnd ? "Yes" : "No")}
+Access until: {endText}
+
+You will keep access until the date above. After that, your profile will require an active subscription.
+
+Manage: {FrontendBase}/coach/subscription
+- PTfinderNow";
+
+                await _email.SendAsync(
+                    to: coach.Email,
+                    subject: subject,
+                    htmlBody: bodyHtml,
+                    textBody: bodyText,
+                    tags: new[] { ("Event", "SubscriptionCancelScheduled") }
+                );
+
+                Console.WriteLine($"[BILLING] {DateTime.UtcNow:o} cancel email sent to={coach.Email} sub={sub.Id}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Cancel email send error: " + ex.Message);
+            }
+        }
 
         // =====================================================================
         // Subscription checkout completion email (trial vs active)
@@ -930,6 +979,7 @@ $"\n\nManage your subscription: {FrontendBase}/coach/subscription\n- PTfinderNow
             }
         }
 
+
         private async Task HandleGiftSessionCompleted(Session session)
         {
             string? coachIdStr = session.Metadata?.TryGetValue("coachId", out var v1) == true ? v1 : null;
@@ -1014,6 +1064,7 @@ Dashboard: {FrontendBase}/dashboard/gifts
                 Console.WriteLine("Email send error: " + mailEx.Message);
             }
         }
+       
 
         private async Task SendPaidInvoiceEmailAsync(Stripe.Invoice invoice, Stripe.Subscription sub)
         {
@@ -1083,6 +1134,8 @@ $"\n\nManage subscription: {FrontendBase}/coach/subscription\n- PTfinderNow";
                 Console.WriteLine("Invoice email send error: " + ex.Message);
             }
         }
+
+
 
         [HttpGet("debug/webhook-config")]
         public ActionResult<object> WebhookConfigDebug()
