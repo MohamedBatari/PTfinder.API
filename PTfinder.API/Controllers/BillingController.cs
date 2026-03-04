@@ -322,10 +322,9 @@ namespace PTfinder.API.Controllers
                     ["billingPeriod"] = req.Yearly ? "yearly" : "monthly",
                     ["kind"] = "subscription"
                 },
-                SubscriptionData = new SessionSubscriptionDataOptions
-                {
-                    TrialPeriodDays = 14
-                }
+                SubscriptionData = plan == "basic"
+                  ? new SessionSubscriptionDataOptions { TrialPeriodDays = 14 }
+                  : new SessionSubscriptionDataOptions()
             };
 
             var svc = new SessionService();
