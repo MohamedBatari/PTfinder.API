@@ -53,6 +53,108 @@ namespace PTfinder.API.Controllers
         private static bool TryCoachId(string? s, out int id) =>
             int.TryParse((s ?? "").Trim(), out id);
 
+
+        public class ChangePlanRequest
+        {
+            public int CoachId { get; set; }
+            public string Plan { get; set; } = "pro"; // basic | pro
+            public bool Yearly { get; set; } = false;
+        }
+
+        [Authorize]
+        [HttpPost("subscription/change-plan")]
+        [Consumes("application/json")]
+        [Produces("application/json")]
+        public async Task<IActionResult> ChangePlan([FromBody] ChangePlanRequest req)
+        {
+            try
+            {
+                if (req == null || req.CoachId <= 0 || string.IsNullOrWhiteSpace(req.Plan))
+                    return BadRequest(new { message = "Invalid request." });
+
+                var coach = await _db.Coaches.FirstOrDefaultAsync(c => c.Id == req.CoachId);
+                if (coach == null)
+                    return NotFound(new { message = "Coach not found." });
+
+                if (string.IsNullOrWhiteSpace(coach.StripeSubscriptionId))
+                    return BadRequest(new { message = "No active Stripe subscription found to upgrade." });
+
+                var plan = req.Plan.Trim().ToLowerInvariant();
+
+                string? newPriceId = null;
+                if (plan == "basic")
+                    newPriceId = req.Yearly ? _stripeSettings.BasicYearlyPriceId : _stripeSettings.BasicMonthlyPriceId;
+                else if (plan == "pro")
+                    newPriceId = req.Yearly ? _stripeSettings.ProYearlyPriceId : _stripeSettings.ProMonthlyPriceId;
+
+                if (string.IsNullOrWhiteSpace(newPriceId))
+                    return BadRequest(new { message = "Invalid plan or billing period." });
+
+                var subSvc = new Stripe.SubscriptionService();
+                var sub = await subSvc.GetAsync(coach.StripeSubscriptionId);
+
+                var item = sub.Items?.Data?.FirstOrDefault();
+                if (item == null)
+                    return StatusCode(500, new { message = "Subscription has no items." });
+
+                // Prevent useless update to same price
+                if (string.Equals(item.Price?.Id, newPriceId, StringComparison.Ordinal))
+                {
+                    return Ok(new
+                    {
+                        ok = true,
+                        message = "Subscription is already on this plan.",
+                        subscriptionId = sub.Id,
+                        status = sub.Status,
+                        currentPeriodEnd = sub.CurrentPeriodEnd
+                    });
+                }
+
+                // ✅ IMPORTANT: this updates the EXISTING subscription item
+                // and charges prorations immediately
+                var updated = await subSvc.UpdateAsync(sub.Id, new SubscriptionUpdateOptions
+                {
+                    CancelAtPeriodEnd = false, // remove scheduled cancel if upgrading
+                    ProrationBehavior = "always_invoice",
+                    Items = new List<SubscriptionItemOptions>
+            {
+                new SubscriptionItemOptions
+                {
+                    Id = item.Id,
+                    Price = newPriceId
+                }
+            }
+                });
+
+                // Update your DB from the updated Stripe subscription
+                await _coachSubscriptions.UpdateFromSubscriptionEventAsync(updated);
+
+                return Ok(new
+                {
+                    ok = true,
+                    message = "Subscription updated and charged immediately.",
+                    subscriptionId = updated.Id,
+                    status = updated.Status,
+                    currentPeriodEnd = updated.CurrentPeriodEnd
+                });
+            }
+            catch (StripeException se)
+            {
+                return StatusCode(502, new
+                {
+                    message = "Stripe error changing subscription plan",
+                    type = se.StripeError?.Type,
+                    code = se.StripeError?.Code,
+                    param = se.StripeError?.Param,
+                    error = se.StripeError?.Message ?? se.Message
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Server error changing subscription plan", error = ex.Message });
+            }
+        }
+
         [HttpGet("debug/db")]
         public IActionResult DbDebug()
         {
