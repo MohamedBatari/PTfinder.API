@@ -101,7 +101,9 @@ namespace PTfinder.API.Controllers
                 coach.EmailVerified,
                 coach.IsActive,
                 coach.CreatedAtUtc,
-                coach.UpdatedAtUtc
+                coach.UpdatedAtUtc,
+                coach.CancelAtPeriodEnd,
+                coach.CanceledAtUtc
             });
 
             return Ok(response);
@@ -186,7 +188,9 @@ namespace PTfinder.API.Controllers
                     coach.EmailVerified,
                     coach.IsActive,
                     coach.CreatedAtUtc,
-                    coach.UpdatedAtUtc
+                    coach.UpdatedAtUtc,
+                    coach.CancelAtPeriodEnd,
+                    coach.CanceledAtUtc
                 };
 
                 return Ok(response);
