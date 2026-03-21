@@ -93,6 +93,9 @@ namespace PTfinder.API.Controllers
                 var subSvc = new Stripe.SubscriptionService();
                 var sub = await subSvc.GetAsync(coach.StripeSubscriptionId);
 
+                if (sub == null)
+                    return NotFound(new { message = "Stripe subscription not found." });
+
                 var item = sub.Items?.Data?.FirstOrDefault();
                 if (item == null)
                     return StatusCode(500, new { message = "Subscription has no items." });
@@ -110,9 +113,7 @@ namespace PTfinder.API.Controllers
                     });
                 }
 
-                // ✅ IMPORTANT: this updates the EXISTING subscription item
-                // and charges prorations immediately
-                var updated = await subSvc.UpdateAsync(sub.Id, new SubscriptionUpdateOptions
+                var options = new SubscriptionUpdateOptions
                 {
                     CancelAtPeriodEnd = false, // remove scheduled cancel if upgrading
                     ProrationBehavior = "always_invoice",
@@ -124,7 +125,17 @@ namespace PTfinder.API.Controllers
                     Price = newPriceId
                 }
             }
-                });
+                };
+
+                // ✅ IMPORTANT:
+                // If upgrading while still in trial, end the trial immediately
+                // so Stripe invoices the upgrade now.
+                if (sub.Status == "trialing")
+                {
+                    options.AddExtraParam("trial_end", "now");
+                }
+
+                var updated = await subSvc.UpdateAsync(sub.Id, options);
 
                 // Update your DB from the updated Stripe subscription
                 await _coachSubscriptions.UpdateFromSubscriptionEventAsync(updated);
@@ -132,10 +143,11 @@ namespace PTfinder.API.Controllers
                 return Ok(new
                 {
                     ok = true,
-                    message = "Subscription updated and charged immediately.",
+                    message = "Subscription updated successfully.",
                     subscriptionId = updated.Id,
                     status = updated.Status,
-                    currentPeriodEnd = updated.CurrentPeriodEnd
+                    currentPeriodEnd = updated.CurrentPeriodEnd,
+                    cancelAtPeriodEnd = updated.CancelAtPeriodEnd
                 });
             }
             catch (StripeException se)
@@ -154,7 +166,6 @@ namespace PTfinder.API.Controllers
                 return StatusCode(500, new { message = "Server error changing subscription plan", error = ex.Message });
             }
         }
-
         [HttpGet("debug/db")]
         public IActionResult DbDebug()
         {
@@ -434,6 +445,9 @@ namespace PTfinder.API.Controllers
 
             return Ok(new SubscriptionCheckoutResponse { Url = session.Url, Message = "Checkout created" });
         }
+
+
+
         // =====================
         // CANCEL SUBSCRIPTION
         // =====================
