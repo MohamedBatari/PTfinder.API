@@ -58,25 +58,7 @@ builder.Services.AddCors(o => o.AddPolicy("web",
 ));
 
 
-builder.Services.AddScoped<IClientJwtService, ClientJwtService>();
 
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"],
-            ValidAudience = builder.Configuration["Jwt:Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
-        };
-    });
-
-builder.Services.AddAuthorization();
 
 // ------------ Hangfire (USE mycon ALWAYS) ------------
 builder.Services.AddHangfire(config =>
@@ -199,7 +181,7 @@ builder.Services.AddScoped<IBookingEmailFlows, BookingEmailFlows>();
 
 
 
-
+builder.Services.AddScoped<IClientJwtService, ClientJwtService>();
 // ------------ Auth (JWT) ------------
 var jwtKey = builder.Configuration["Jwt:Key"]
     ?? throw new InvalidOperationException("Missing configuration: Jwt:Key");
