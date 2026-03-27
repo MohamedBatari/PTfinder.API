@@ -1,10 +1,8 @@
 ﻿using Google.Apis.Auth;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PTfinder.API.DATA;
-using PTfinder.API.DATA;
-using PTfinder.API.DTO.ClientAuth;
-using PTfinder.API.DTO.ClientAuth;
 using PTfinder.API.Models;
 using PTfinder.API.Services;
 
@@ -28,14 +26,13 @@ namespace PTfinder.API.Controllers
             _config = config;
         }
 
+        [AllowAnonymous]
         [HttpPost("google")]
-        public async Task<ActionResult<GoogleClientLoginResponse>> GoogleLogin([FromBody] GoogleClientLoginRequest req)
+        [Consumes("application/x-www-form-urlencoded")]
+        public async Task<IActionResult> GoogleLogin([FromForm] string credential)
         {
-            if (req == null || string.IsNullOrWhiteSpace(req.IdToken))
-                return BadRequest(new { message = "Google token is required." });
-
-            if (!req.TermsAccepted || !req.PrivacyAccepted)
-                return BadRequest(new { message = "Terms and Privacy must be accepted." });
+            if (string.IsNullOrWhiteSpace(credential))
+                return BadRequest(new { message = "Google credential is required." });
 
             GoogleJsonWebSignature.Payload payload;
             try
@@ -45,15 +42,15 @@ namespace PTfinder.API.Controllers
                     return StatusCode(500, new { message = "GoogleAuth:ClientId is not configured." });
 
                 payload = await GoogleJsonWebSignature.ValidateAsync(
-                    req.IdToken,
+                    credential,
                     new GoogleJsonWebSignature.ValidationSettings
                     {
                         Audience = new[] { googleClientId }
                     });
             }
-            catch
+            catch (Exception ex)
             {
-                return Unauthorized(new { message = "Invalid Google token." });
+                return Unauthorized(new { message = "Invalid Google token.", detail = ex.Message });
             }
 
             if (string.IsNullOrWhiteSpace(payload.Email) || string.IsNullOrWhiteSpace(payload.Subject))
@@ -79,15 +76,18 @@ namespace PTfinder.API.Controllers
                     EmailVerified = payload.EmailVerified,
                     CreatedAtUtc = now,
                     LastLoginAtUtc = now,
+
                     TermsAccepted = true,
-                    TermsVersion = req.TermsVersion ?? "v1",
+                    TermsVersion = "v1",
                     TermsAcceptedAtUtc = now,
+
                     PrivacyAccepted = true,
-                    PrivacyVersion = req.PrivacyVersion ?? "v1",
+                    PrivacyVersion = "v1",
                     PrivacyAcceptedAtUtc = now,
+
                     LastIpAddress = ip,
                     LastUserAgent = ua,
-                    ClientTimeZone = req.ClientTimeZone
+                    ClientTimeZone = "Asia/Dubai"
                 };
 
                 _db.Clients.Add(client);
@@ -102,32 +102,34 @@ namespace PTfinder.API.Controllers
                 client.LastLoginAtUtc = now;
                 client.LastIpAddress = ip;
                 client.LastUserAgent = ua;
-                client.ClientTimeZone = req.ClientTimeZone;
 
                 client.TermsAccepted = true;
-                client.TermsVersion = req.TermsVersion ?? client.TermsVersion ?? "v1";
+                client.TermsVersion = client.TermsVersion ?? "v1";
                 client.TermsAcceptedAtUtc ??= now;
 
                 client.PrivacyAccepted = true;
-                client.PrivacyVersion = req.PrivacyVersion ?? client.PrivacyVersion ?? "v1";
+                client.PrivacyVersion = client.PrivacyVersion ?? "v1";
                 client.PrivacyAcceptedAtUtc ??= now;
+
+                client.ClientTimeZone ??= "Asia/Dubai";
             }
 
             await _db.SaveChangesAsync();
 
             var token = _jwtService.GenerateToken(client);
 
-            return Ok(new GoogleClientLoginResponse
-            {
-                Token = token,
-                Client = new ClientAuthUserDto
-                {
-                    Id = client.Id,
-                    FullName = client.FullName,
-                    Email = client.Email,
-                    PictureUrl = client.PictureUrl
-                }
-            });
+            var frontendBase =
+                _config["FrontendBase"]?.TrimEnd('/')
+                ?? "https://www.ptfindernow.com";
+
+            var redirectUrl =
+                $"{frontendBase}/google-auth-success" +
+                $"?token={Uri.EscapeDataString(token)}" +
+                $"&name={Uri.EscapeDataString(client.FullName ?? "")}" +
+                $"&email={Uri.EscapeDataString(client.Email ?? "")}" +
+                $"&picture={Uri.EscapeDataString(client.PictureUrl ?? "")}";
+
+            return Redirect(redirectUrl);
         }
     }
 }
