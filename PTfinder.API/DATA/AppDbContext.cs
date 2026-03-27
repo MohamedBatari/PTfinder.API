@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using PTfinder.API.DATA.Modules;
+using PTfinder.API.Models;
 using Stripe;
 
 namespace PTfinder.API.DATA
@@ -22,6 +23,9 @@ namespace PTfinder.API.DATA
         public DbSet<EmailOtp> EmailOtps { get; set; } = default!;
         public DbSet<Notification> Notifications { get; set; } = null!;
         public DbSet<CoachGift> CoachGifts { get; set; } = null!;
+
+        public DbSet<Client> Clients { get; set; }
+        public DbSet<ClientContactView> ClientContactViews { get; set; }
 
 
 
@@ -100,6 +104,47 @@ namespace PTfinder.API.DATA
                 b.HasIndex(x => x.Email);
                 b.HasIndex(x => new { x.Email, x.CodeHash });
                 b.HasIndex(x => x.ExpiresUtc);
+            });
+
+            modelBuilder.Entity<Client>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+
+                entity.HasIndex(x => x.Email).IsUnique();
+                entity.HasIndex(x => x.GoogleSub).IsUnique();
+
+                entity.Property(x => x.Email).HasMaxLength(256).IsRequired();
+                entity.Property(x => x.GoogleSub).HasMaxLength(128).IsRequired();
+                entity.Property(x => x.FullName).HasMaxLength(200).IsRequired();
+                entity.Property(x => x.PictureUrl).HasMaxLength(1000);
+                entity.Property(x => x.LastIpAddress).HasMaxLength(100);
+                entity.Property(x => x.LastUserAgent).HasMaxLength(1000);
+                entity.Property(x => x.ClientTimeZone).HasMaxLength(100);
+                entity.Property(x => x.TermsVersion).HasMaxLength(50);
+                entity.Property(x => x.PrivacyVersion).HasMaxLength(50);
+            });
+
+            modelBuilder.Entity<ClientContactView>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+
+                entity.Property(x => x.ActionType).HasMaxLength(50).IsRequired();
+                entity.Property(x => x.IpAddress).HasMaxLength(100);
+                entity.Property(x => x.UserAgent).HasMaxLength(1000);
+                entity.Property(x => x.Referrer).HasMaxLength(1000);
+                entity.Property(x => x.ClientTimeZone).HasMaxLength(100);
+
+                entity.HasOne(x => x.Client)
+                    .WithMany(x => x.ContactViews)
+                    .HasForeignKey(x => x.ClientId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(x => x.Coach)
+                    .WithMany()
+                    .HasForeignKey(x => x.CoachId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasIndex(x => new { x.ClientId, x.CoachId, x.CreatedAtUtc });
             });
 
 

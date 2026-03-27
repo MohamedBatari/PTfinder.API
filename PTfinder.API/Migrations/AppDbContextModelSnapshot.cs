@@ -605,6 +605,132 @@ namespace PTfinder.API.Migrations
                     b.ToTable("Specialities");
                 });
 
+            modelBuilder.Entity("PTfinder.API.Models.Client", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ClientTimeZone")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<bool>("EmailVerified")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("GoogleSub")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<string>("LastIpAddress")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("LastLoginAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("LastUserAgent")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("PictureUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<bool>("PrivacyAccepted")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("PrivacyAcceptedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("PrivacyVersion")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<bool>("TermsAccepted")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("TermsAcceptedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("TermsVersion")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Email")
+                        .IsUnique();
+
+                    b.HasIndex("GoogleSub")
+                        .IsUnique();
+
+                    b.ToTable("Clients");
+                });
+
+            modelBuilder.Entity("PTfinder.API.Models.ClientContactView", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("ActionType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("ClientId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ClientTimeZone")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("CoachId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Referrer")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("UserAgent")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CoachId");
+
+                    b.HasIndex("ClientId", "CoachId", "CreatedAtUtc");
+
+                    b.ToTable("ClientContactViews");
+                });
+
             modelBuilder.Entity("Review", b =>
                 {
                     b.Property<int>("Id")
@@ -785,6 +911,25 @@ namespace PTfinder.API.Migrations
                     b.Navigation("Category");
                 });
 
+            modelBuilder.Entity("PTfinder.API.Models.ClientContactView", b =>
+                {
+                    b.HasOne("PTfinder.API.Models.Client", "Client")
+                        .WithMany("ContactViews")
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PTfinder.API.DATA.Modules.Coach", "Coach")
+                        .WithMany()
+                        .HasForeignKey("CoachId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Client");
+
+                    b.Navigation("Coach");
+                });
+
             modelBuilder.Entity("Review", b =>
                 {
                     b.HasOne("PTfinder.API.DATA.Modules.Coach", null)
@@ -830,6 +975,11 @@ namespace PTfinder.API.Migrations
             modelBuilder.Entity("PTfinder.API.DATA.Modules.Speciality", b =>
                 {
                     b.Navigation("Coaches");
+                });
+
+            modelBuilder.Entity("PTfinder.API.Models.Client", b =>
+                {
+                    b.Navigation("ContactViews");
                 });
 #pragma warning restore 612, 618
         }
