@@ -37,7 +37,7 @@ namespace PTfinder.API.Controllers
             GoogleJsonWebSignature.Payload payload;
             try
             {
-                var googleClientId = _config["GoogleAuth:ClientId:0"];
+                var googleClientId = _config["GoogleAuth:ClientIds:0"];
                 if (string.IsNullOrWhiteSpace(googleClientId))
                     return StatusCode(500, new { message = "GoogleAuth:ClientId is not configured." });
 
