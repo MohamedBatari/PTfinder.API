@@ -26,6 +26,7 @@ namespace PTfinder.API.DATA
 
         public DbSet<Client> Clients { get; set; }
         public DbSet<ClientContactView> ClientContactViews { get; set; }
+        public DbSet<CoachProfileView> CoachProfileViews { get; set; }
 
 
 

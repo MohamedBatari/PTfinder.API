@@ -2,13 +2,10 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PTfinder.API.DATA;
-using PTfinder.API.DATA;
-using PTfinder.API.DTO.ClientContact;
 using PTfinder.API.DTO.ClientContact;
 using PTfinder.API.Models;
-using System.Linq;
-using System.Security.Claims;
 using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 
 namespace PTfinder.API.Controllers
 {
