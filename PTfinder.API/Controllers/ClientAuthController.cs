@@ -39,7 +39,7 @@ namespace PTfinder.API.Controllers
             {
                 var googleClientId = _config["GoogleAuth:ClientIds:0"];
                 if (string.IsNullOrWhiteSpace(googleClientId))
-                    return StatusCode(500, new { message = "GoogleAuth:ClientId is not configured." });
+                    return StatusCode(500, new { message = "GoogleAuth:ClientIds:0 is not configured." });
 
                 payload = await GoogleJsonWebSignature.ValidateAsync(
                     credential,
@@ -57,7 +57,7 @@ namespace PTfinder.API.Controllers
                 return Unauthorized(new { message = "Invalid Google account data." });
 
             var email = payload.Email.Trim().ToLowerInvariant();
-            var googleSub = payload.Subject;
+            var googleSub = payload.Subject.Trim();
             var now = DateTime.UtcNow;
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
             var ua = Request.Headers.UserAgent.ToString();
