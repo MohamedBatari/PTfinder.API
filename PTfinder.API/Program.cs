@@ -4,6 +4,7 @@ using Hangfire.SqlServer;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -17,6 +18,7 @@ using PTfinder.API.Settings;
 using Stripe;
 using System.Diagnostics;
 using System.Text;
+using System.Threading.RateLimiting;
 using AppBillingService = PTfinder.API.Services.BillingService; // alias to avoid Stripe.BillingService collision
 
 var builder = WebApplication.CreateBuilder(args);
@@ -46,12 +48,20 @@ var allowedOrigins = new[]
     "https://ptfindernow.com",
     "https://www.ptfindernow.com",
     "http://localhost:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:3001",
 };
 
 // CORS must allow WebSockets + credentials from your web origins
 builder.Services.AddCors(o => o.AddPolicy("web",
     p => p
-        .WithOrigins("http://localhost:3000", "https://ptfindernow.com")
+        .WithOrigins(
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:3001",
+            "https://ptfindernow.com")
         .AllowAnyHeader()
         .AllowAnyMethod()
         .AllowCredentials()
@@ -124,6 +134,23 @@ builder.Services.AddControllers()
             System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
     });
 
+builder.Services.AddMemoryCache();
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("password-reset", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(10),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+});
+
 // ------------ Other app services ------------
 builder.Services.AddSingleton<BlobStorageService>();
 
@@ -174,6 +201,8 @@ builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
 
 // ------------ Booking reminder emails ------------
 builder.Services.AddScoped<IBookingReminderEmails, BookingReminderEmails>();
+builder.Services.AddSingleton<IPasswordResetTokenService, PasswordResetTokenService>();
+builder.Services.AddScoped<IPasswordResetEmailJob, PasswordResetEmailJob>();
 
 
 
@@ -261,6 +290,7 @@ else
 // ------------ Middleware order ------------
 app.UseHttpsRedirection();
 app.UseCors("AllowReactApp"); // primary CORS for API requests
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseStaticFiles();

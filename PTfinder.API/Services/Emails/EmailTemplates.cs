@@ -106,6 +106,38 @@ namespace PTfinder.API.Services.Emails
 </div>";
         }
 
+        public static string PasswordResetHtml(
+            string firstName,
+            string resetUrl,
+            int expiresMinutes,
+            string logoUrl,
+            string supportEmail = "info@ptfindernow.com",
+            string webBaseUrl = "https://ptfindernow.com")
+        {
+            var body = $@"
+<div style=""font-size:16px;font-weight:900;margin-bottom:10px;"">Hi {E(firstName)},</div>
+
+<div style=""font-size:14px;line-height:1.7;color:#334155;"">
+  We received a request to reset your <strong>PTfinderNow</strong> password.
+</div>
+
+{Button(resetUrl, "Reset your password →")}
+
+<div style=""margin-top:16px;font-size:13px;line-height:1.8;color:#475569;"">
+  This link expires in <strong>{expiresMinutes} minutes</strong> and stops working after your password is changed.<br/>
+  If you did not request this reset, you can safely ignore this email.
+</div>";
+
+            return Wrap(
+                title: "Reset your PTfinderNow password",
+                logoUrl: logoUrl,
+                badgeText: "Password reset",
+                bodyHtml: body,
+                supportEmail: supportEmail,
+                webBaseUrl: webBaseUrl
+            );
+        }
+
         // ✅ Welcome Coach Email (UPDATED: add Tips + Thanks Gift note)
         public static string WelcomeCoachHtml(
             string firstName,

@@ -262,39 +262,6 @@ Questions? Reply to this email and we’ll help you out.
         }
 
         // ─────────────────────────────────────────────────────────────────────────────
-        // Reset password
-        // ─────────────────────────────────────────────────────────────────────────────
-        [HttpPost("reset-password")]
-        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordEmailDto dto, CancellationToken ct)
-        {
-            if (!ModelState.IsValid) return BadRequest(new { error = "Invalid email or parameters." });
-
-            var subject = "Reset your password — PTfinderNow";
-            var text =
-$@"We received a request to reset your PTfinderNow password for {dto.Email}.
-
-Reset your password:
-{dto.ResetLink}
-
-This link expires in {dto.ExpiresMinutes} minutes. If you didn’t request a reset, you can ignore this email.
-
-{EmailText.Footer}";
-
-            await _sender.SendAsync(
-                to: dto.To,
-                subject: subject,
-                htmlBody: null,
-                textBody: text,
-                ct: ct,
-                headers: FlowHeaders("reset-password"),
-                tags: Tags(("flow", "reset-password")),
-                fromOverride: null
-            );
-
-            return Ok(new { sent = true });
-        }
-
-        // ─────────────────────────────────────────────────────────────────────────────
         // Booking: request → PT (coach)
         // ─────────────────────────────────────────────────────────────────────────────
         [HttpPost("booking/request-pt")]

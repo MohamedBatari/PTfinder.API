@@ -42,15 +42,6 @@ public sealed class WelcomeEmailDto
     [Required/*, Url*/] public string DashboardUrl { get; set; } = default!;
 }
 
-// Reset password
-public sealed class ResetPasswordEmailDto
-{
-    [Required, EmailAddress] public string To { get; set; } = default!;
-    [Required, EmailAddress] public string Email { get; set; } = default!;
-    [Required/*, Url*/] public string ResetLink { get; set; } = default!;
-    [Range(5, 1440)] public int ExpiresMinutes { get; set; } = 30;
-}
-
 // Booking – client requests PT
 public sealed class BookingRequestPtEmailDto
 {
