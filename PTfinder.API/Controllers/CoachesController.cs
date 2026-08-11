@@ -279,9 +279,7 @@ namespace PTfinder.API.Controllers
                 c.FullName,
                 c.CreatedAtUtc, // ✅ IMPORTANT (must exist in your Coach entity)
 
-                ProfileImage = string.IsNullOrWhiteSpace(c.ProfileImage)
-                    ? null
-                    : ToProfileReadUrl(c.ProfileImage),
+                ProfileImageKey = c.ProfileImage,
 
                 c.Price,
                 c.Description,
@@ -324,7 +322,34 @@ namespace PTfinder.API.Controllers
                 _ => projected.OrderByDescending(x => x.CreatedAtUtc) // ✅ Newest default
             };
 
-            var result = await projected.ToListAsync();
+            var rows = await projected.ToListAsync();
+            var result = rows.Select(c => new
+            {
+                c.Id,
+                c.FullName,
+                c.CreatedAtUtc,
+                ProfileImage = string.IsNullOrWhiteSpace(c.ProfileImageKey)
+                    ? null
+                    : ToProfileReadUrl(c.ProfileImageKey),
+                c.Price,
+                c.Description,
+                c.CategoryId,
+                c.SpecialityId,
+                c.CountryId,
+                c.CityId,
+                c.AreaId,
+                c.CategoryName,
+                c.SpecialtyName,
+                c.CountryName,
+                c.CityName,
+                c.AreaName,
+                c.NumReviews,
+                c.AvgRating,
+                c.SubscriptionTier,
+                c.SubscriptionStatus,
+                c.SubscriptionExpiresAtUtc,
+                c.CurrentPeriodEndUtc
+            });
             return Ok(result);
         }
 
