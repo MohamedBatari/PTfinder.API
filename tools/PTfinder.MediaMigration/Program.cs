@@ -290,11 +290,19 @@ static async Task<string> ImportVideoAsync(
     MigrationEntry entry)
 {
     using var request = new HttpRequestMessage(HttpMethod.Post, $"accounts/{Uri.EscapeDataString(accountId)}/stream/copy");
-    request.Headers.TryAddWithoutValidation("Upload-Creator", $"coach:{entry.CoachId}");
     request.Content = JsonContent.Create(new
     {
-        url = sourceUrl.ToString(),
-        meta = new { coachId = entry.CoachId, source = "azure-migration", kind = entry.Kind, recordId = entry.RecordId }
+        input = sourceUrl.ToString(),
+        creator = $"coach:{entry.CoachId}",
+        name = $"ptfindernow-{entry.Kind}-{entry.RecordId}",
+        requireSignedURLs = false,
+        meta = new Dictionary<string, string>
+        {
+            ["coachId"] = entry.CoachId.ToString(),
+            ["source"] = "azure-migration",
+            ["kind"] = entry.Kind,
+            ["recordId"] = entry.RecordId.ToString()
+        }
     });
     var result = await SendForResultAsync(http, request);
     return RequiredString(result, "uid");
