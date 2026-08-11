@@ -14,11 +14,16 @@ namespace PTfinder.API.Controllers
 
         private readonly AppDbContext _context;
         private readonly BlobStorageService _blobs;
+        private readonly ICloudflareMediaService _cloudflare;
 
-        public MobileExploreController(AppDbContext context, BlobStorageService blobs)
+        public MobileExploreController(
+            AppDbContext context,
+            BlobStorageService blobs,
+            ICloudflareMediaService cloudflare)
         {
             _context = context;
             _blobs = blobs;
+            _cloudflare = cloudflare;
         }
 
         [HttpGet("feed")]
@@ -131,7 +136,22 @@ namespace PTfinder.API.Controllers
         {
             var media = SelectBestMedia(coach.GalleryMedia, filter);
             var profileImage = ToReadUrl(coach.ProfileImage);
-            var mediaUrl = media != null ? ToReadUrl(media.Url) : profileImage;
+            var mediaUrl = profileImage;
+            var thumbnailUrl = profileImage;
+
+            if (media != null)
+            {
+                if (_cloudflare.TryResolve(media.Url, media.MediaType, out var resolved))
+                {
+                    mediaUrl = resolved.MediaUrl;
+                    thumbnailUrl = resolved.ThumbnailUrl ?? profileImage ?? resolved.MediaUrl;
+                }
+                else
+                {
+                    mediaUrl = ToReadUrl(media.Url);
+                    thumbnailUrl = profileImage ?? mediaUrl;
+                }
+            }
 
             if (string.IsNullOrWhiteSpace(mediaUrl))
                 return null;
@@ -194,7 +214,7 @@ namespace PTfinder.API.Controllers
                 FeedOrder: 0,
                 Source: media == null ? "profile" : "gallery",
                 MediaUrl: mediaUrl,
-                ThumbUrl: mediaType == "video" ? profileImage ?? mediaUrl : mediaUrl,
+                ThumbUrl: mediaType == "video" ? thumbnailUrl : mediaUrl,
                 MediaType: mediaType,
                 Caption: caption,
                 MediaCount: Math.Max(1, validGalleryCount),
@@ -332,11 +352,20 @@ namespace PTfinder.API.Controllers
             if (string.IsNullOrWhiteSpace(url))
                 return false;
 
+            if (url.StartsWith("cf-stream:", StringComparison.OrdinalIgnoreCase) ||
+                url.StartsWith("cf-images:", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
             return IsVideo(url, mediaType) || IsImage(url);
         }
 
         private static bool IsVideo(string? url, string? mediaType)
         {
+            if (url?.StartsWith("cf-stream:", StringComparison.OrdinalIgnoreCase) == true)
+                return true;
+
             var rawType = mediaType?.Trim().ToLowerInvariant() ?? "";
             if (rawType.Contains("video"))
                 return true;
@@ -350,6 +379,9 @@ namespace PTfinder.API.Controllers
 
         private static bool IsImage(string? url)
         {
+            if (url?.StartsWith("cf-images:", StringComparison.OrdinalIgnoreCase) == true)
+                return true;
+
             var path = StripQuery(url);
             return path.EndsWith(".jpg") ||
                    path.EndsWith(".jpeg") ||
