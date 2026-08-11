@@ -375,6 +375,11 @@ else
 
 // ------------ Liveness & diagnostics endpoints ------------
 app.MapGet("/health", () => Results.Ok(new { status = "ok", t = DateTime.UtcNow }));
+app.MapGet("/health/media", (ICloudflareMediaService cloudflare) => Results.Ok(new
+{
+    status = cloudflare.Enabled ? "ready" : "disabled",
+    provider = "cloudflare"
+}));
 app.MapHealthChecks("/healthz");
 
 // Config peek (no secrets leaked)
