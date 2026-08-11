@@ -250,6 +250,9 @@ namespace PTfinder.API.Controllers
             if (string.IsNullOrWhiteSpace(blobName))
                 return null;
 
+            if (_cloudflare.TryResolve(blobName, "image", out var cloudflareMedia))
+                return cloudflareMedia.MediaUrl;
+
             if (blobName.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
                 blobName.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
                 blobName.StartsWith("/", StringComparison.OrdinalIgnoreCase))

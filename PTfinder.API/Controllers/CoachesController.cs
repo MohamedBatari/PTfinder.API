@@ -17,17 +17,20 @@ namespace PTfinder.API.Controllers
     {
         private readonly AppDbContext _context;
         private readonly BlobStorageService _blobs;
+        private readonly ICloudflareMediaService _cloudflare;
         private readonly IEmailSender _sender;
         private readonly ILogger<CoachesController> _logger;
 
         public CoachesController(
             AppDbContext context,
             BlobStorageService blobs,
+            ICloudflareMediaService cloudflare,
             IEmailSender sender,
             ILogger<CoachesController> logger)
         {
             _context = context;
             _blobs = blobs;
+            _cloudflare = cloudflare;
             _sender = sender;
             _logger = logger;
         }
@@ -78,7 +81,7 @@ namespace PTfinder.API.Controllers
                 // Profile Image (with SAS link)
                 ProfileImage = string.IsNullOrWhiteSpace(coach.ProfileImage)
                     ? null
-                    : _blobs.GetReadUrl(coach.ProfileImage, TimeSpan.FromMinutes(60)),
+                    : ToProfileReadUrl(coach.ProfileImage),
 
                 // Availability
                 Availabilities = coach.Availabilities.Select(a => new
@@ -131,7 +134,7 @@ namespace PTfinder.API.Controllers
 
                 var profileImageUrl = string.IsNullOrWhiteSpace(coach.ProfileImage)
                     ? null
-                    : _blobs.GetReadUrl(coach.ProfileImage, TimeSpan.FromMinutes(60));
+                    : ToProfileReadUrl(coach.ProfileImage);
 
                 var response = new
                 {
@@ -278,7 +281,7 @@ namespace PTfinder.API.Controllers
 
                 ProfileImage = string.IsNullOrWhiteSpace(c.ProfileImage)
                     ? null
-                    : _blobs.GetReadUrl(c.ProfileImage, TimeSpan.FromMinutes(60)),
+                    : ToProfileReadUrl(c.ProfileImage),
 
                 c.Price,
                 c.Description,
@@ -372,10 +375,10 @@ namespace PTfinder.API.Controllers
 
             if (dto.ProfileImage != null && dto.ProfileImage.Length > 0)
             {
-                var fileName = Guid.NewGuid() + Path.GetExtension(dto.ProfileImage.FileName);
-                await using var stream = dto.ProfileImage.OpenReadStream();
-                await _blobs.UploadAsync(fileName, stream, dto.ProfileImage.ContentType);
-                blobName = fileName;
+                blobName = await StoreProfileImageAsync(
+                    dto.ProfileImage,
+                    coachId: 0,
+                    HttpContext.RequestAborted);
             }
 
             var now = DateTime.UtcNow;
@@ -516,6 +519,8 @@ Best regards,
             if (coach == null)
                 return NotFound();
 
+            string? previousProfileImage = null;
+
             if (!string.IsNullOrWhiteSpace(dto.FullName))
                 coach.FullName = dto.FullName;
 
@@ -554,18 +559,30 @@ Best regards,
 
             if (dto.ProfileImage != null && dto.ProfileImage.Length > 0)
             {
-                var newName = Guid.NewGuid() + Path.GetExtension(dto.ProfileImage.FileName);
-
-                await using var stream = dto.ProfileImage.OpenReadStream();
-                await _blobs.UploadAsync(newName, stream, dto.ProfileImage.ContentType);
-
-                if (!string.IsNullOrWhiteSpace(coach.ProfileImage))
-                    await _blobs.DeleteAsync(coach.ProfileImage);
-
-                coach.ProfileImage = newName;
+                previousProfileImage = coach.ProfileImage;
+                coach.ProfileImage = await StoreProfileImageAsync(
+                    dto.ProfileImage,
+                    coach.Id,
+                    HttpContext.RequestAborted);
             }
 
             await _context.SaveChangesAsync();
+
+            if (!string.IsNullOrWhiteSpace(previousProfileImage))
+            {
+                try
+                {
+                    await DeleteStoredMediaAsync(previousProfileImage, "image", HttpContext.RequestAborted);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(
+                        ex,
+                        "The previous profile image for coach {CoachId} could not be removed after replacement.",
+                        coach.Id);
+                }
+            }
+
             return NoContent();
         }
 
@@ -577,12 +594,62 @@ Best regards,
                 return NotFound();
 
             if (!string.IsNullOrWhiteSpace(coach.ProfileImage))
-                await _blobs.DeleteAsync(coach.ProfileImage);
+                await DeleteStoredMediaAsync(coach.ProfileImage, "image", HttpContext.RequestAborted);
 
             _context.Coaches.Remove(coach);
             await _context.SaveChangesAsync();
 
             return NoContent();
+        }
+
+        private string ToProfileReadUrl(string storageKey)
+        {
+            if (_cloudflare.TryResolve(storageKey, "image", out var resolved))
+                return resolved.MediaUrl;
+
+            if (storageKey.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                storageKey.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+                storageKey.StartsWith("/", StringComparison.OrdinalIgnoreCase))
+            {
+                return storageKey;
+            }
+
+            return _blobs.GetReadUrl(storageKey, TimeSpan.FromMinutes(60));
+        }
+
+        private async Task<string> StoreProfileImageAsync(
+            IFormFile profileImage,
+            int coachId,
+            CancellationToken cancellationToken)
+        {
+            var fileName = Guid.NewGuid() + Path.GetExtension(profileImage.FileName);
+            await using var stream = profileImage.OpenReadStream();
+
+            if (_cloudflare.Enabled)
+            {
+                if (profileImage.Length > _cloudflare.MaxBytesFor("image"))
+                    throw new InvalidOperationException("The selected profile image is too large.");
+
+                return await _cloudflare.UploadImageAsync(
+                    stream,
+                    fileName,
+                    profileImage.ContentType,
+                    coachId,
+                    cancellationToken);
+            }
+
+            await _blobs.UploadAsync(fileName, stream, profileImage.ContentType);
+            return fileName;
+        }
+
+        private Task DeleteStoredMediaAsync(
+            string storageKey,
+            string mediaType,
+            CancellationToken cancellationToken)
+        {
+            return _cloudflare.TryResolve(storageKey, mediaType, out _)
+                ? _cloudflare.DeleteAsync(storageKey, cancellationToken)
+                : _blobs.DeleteAsync(storageKey);
         }
     }
 }

@@ -27,6 +27,12 @@ public interface ICloudflareMediaService
 {
     bool Enabled { get; }
     long MaxBytesFor(string mediaType);
+    Task<string> UploadImageAsync(
+        Stream content,
+        string fileName,
+        string contentType,
+        int coachId,
+        CancellationToken cancellationToken);
     Task<DirectMediaUpload> CreateDirectUploadAsync(
         string mediaType,
         int coachId,
@@ -71,6 +77,35 @@ public sealed class CloudflareMediaService : ICloudflareMediaService
 
     public long MaxBytesFor(string mediaType) =>
         IsVideo(mediaType) ? _options.MaxVideoBytes : _options.MaxImageBytes;
+
+    public async Task<string> UploadImageAsync(
+        Stream content,
+        string fileName,
+        string contentType,
+        int coachId,
+        CancellationToken cancellationToken)
+    {
+        EnsureEnabled();
+
+        using var request = CreateRequest(
+            HttpMethod.Post,
+            $"accounts/{Uri.EscapeDataString(_options.AccountId)}/images/v1");
+        using var form = new MultipartFormDataContent
+        {
+            { new StringContent("false"), "requireSignedURLs" },
+            { new StringContent(JsonSerializer.Serialize(new { coachId, usage = "profile" })), "metadata" }
+        };
+
+        var fileContent = new StreamContent(content);
+        if (MediaTypeHeaderValue.TryParse(contentType, out var parsedContentType))
+            fileContent.Headers.ContentType = parsedContentType;
+
+        form.Add(fileContent, "file", Path.GetFileName(fileName));
+        request.Content = form;
+
+        var result = await SendForResultAsync(request, cancellationToken);
+        return BuildStorageKey("image", ReadRequiredString(result, "id"));
+    }
 
     public async Task<DirectMediaUpload> CreateDirectUploadAsync(
         string mediaType,
