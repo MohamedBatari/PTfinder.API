@@ -3,7 +3,8 @@ param(
     [string]$Mode = 'DryRun',
     [string]$MigrationProject = (Join-Path $PSScriptRoot 'PTfinder.MediaMigration\PTfinder.MediaMigration.csproj'),
     [string]$BackendProject = (Join-Path $PSScriptRoot '..\PTfinder.API\PTfinder.API.csproj'),
-    [string]$ManifestPath = (Join-Path $PSScriptRoot '..\migration-backups\cloudflare-media-manifest.json')
+    [string]$ManifestPath = (Join-Path $PSScriptRoot '..\migration-backups\cloudflare-media-manifest.json'),
+    [switch]$BeginAuthorization
 )
 
 $ErrorActionPreference = 'Stop'
@@ -13,22 +14,37 @@ $clientId = '04b07795-8ddb-461a-bbee-02f9e1bf7b46'
 $tenant = 'organizations'
 $scope = 'https://management.azure.com/.default offline_access openid profile'
 $ruleName = 'PTfinderMediaMigration'
+$authorizationStatePath = Join-Path $env:TEMP 'ptfindernow-media-migration-azure-auth.json'
 
-function Get-AzureManagementToken {
+function Start-AzureManagementAuthorization {
     $device = Invoke-RestMethod `
         -Method Post `
         -Uri "https://login.microsoftonline.com/$tenant/oauth2/v2.0/devicecode" `
         -ContentType 'application/x-www-form-urlencoded' `
         -Body @{ client_id = $clientId; scope = $scope }
 
+    @{
+        client_id = $clientId
+        device_code = $device.device_code
+        interval = [int]$device.interval
+        expires_at_utc = [DateTimeOffset]::UtcNow.AddSeconds([int]$device.expires_in).ToString('O')
+    } | ConvertTo-Json | Set-Content -LiteralPath $authorizationStatePath -Encoding UTF8
+
     Write-Host ''
     Write-Host 'Azure sign-in is required for a temporary one-IP SQL firewall rule.' -ForegroundColor Cyan
     Write-Host "Open: $($device.verification_uri)" -ForegroundColor Yellow
     Write-Host "Code: $($device.user_code)" -ForegroundColor Yellow
     Start-Process -FilePath $device.verification_uri
+}
 
-    $deadline = [DateTimeOffset]::UtcNow.AddSeconds([int]$device.expires_in)
-    $interval = [Math]::Max(5, [int]$device.interval)
+function Get-AzureManagementToken {
+    if (-not (Test-Path -LiteralPath $authorizationStatePath)) {
+        throw 'Azure authorization was not started. Run with -BeginAuthorization first.'
+    }
+
+    $state = Get-Content -LiteralPath $authorizationStatePath -Raw | ConvertFrom-Json
+    $deadline = [DateTimeOffset]::Parse($state.expires_at_utc)
+    $interval = [Math]::Max(5, [int]$state.interval)
     while ([DateTimeOffset]::UtcNow -lt $deadline) {
         try {
             return Invoke-RestMethod `
@@ -37,8 +53,8 @@ function Get-AzureManagementToken {
                 -ContentType 'application/x-www-form-urlencoded' `
                 -Body @{
                     grant_type = 'urn:ietf:params:oauth:grant-type:device_code'
-                    client_id = $clientId
-                    device_code = $device.device_code
+                    client_id = $state.client_id
+                    device_code = $state.device_code
                 }
         }
         catch {
@@ -111,6 +127,11 @@ function Invoke-Migration([string[]]$Arguments) {
     if ($LASTEXITCODE -ne 0) {
         throw "The media migration tool exited with code $LASTEXITCODE."
     }
+}
+
+if ($BeginAuthorization) {
+    Start-AzureManagementAuthorization
+    return
 }
 
 $secrets = Get-BackendSecrets
@@ -188,4 +209,5 @@ finally {
     }
     $token = $null
     $headers = $null
+    Remove-Item -LiteralPath $authorizationStatePath -Force -ErrorAction SilentlyContinue
 }
