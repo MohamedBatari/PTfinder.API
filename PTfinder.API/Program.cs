@@ -94,6 +94,10 @@ builder.Services.AddHangfireServer();
 builder.Services.Configure<StripeSettings>(builder.Configuration.GetSection("Stripe"));
 // StripeConfiguration.ApiKey already set above
 
+// Cloudflare Images + Stream. Secrets are supplied through Azure app settings.
+builder.Services.Configure<CloudflareMediaOptions>(
+    builder.Configuration.GetSection(CloudflareMediaOptions.SectionName));
+
 // Register your BillingService using the alias (prevents ambiguity with Stripe.BillingService)
 builder.Services.AddScoped<AppBillingService>();
 builder.Services.AddScoped<ICoachSubscriptionService, CoachSubscriptionService>();
@@ -153,6 +157,7 @@ builder.Services.AddRateLimiter(options =>
 
 // ------------ Other app services ------------
 builder.Services.AddSingleton<BlobStorageService>();
+builder.Services.AddHttpClient<ICloudflareMediaService, CloudflareMediaService>();
 
 // ------------ API behavior tweaks ------------
 builder.Services.Configure<ApiBehaviorOptions>(o =>
@@ -344,8 +349,13 @@ else
 }
 
 // ------------ SAFE auto-migrate ------------
-using (var scope = app.Services.CreateScope())
+var migrationsEnabled =
+    app.Environment.IsDevelopment() ||
+    builder.Configuration.GetValue<bool>("DatabaseMigrations:Enabled");
+
+if (migrationsEnabled)
 {
+    using var scope = app.Services.CreateScope();
     try
     {
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -357,6 +367,10 @@ using (var scope = app.Services.CreateScope())
     {
         app.Logger.LogWarning(ex, "Migrate failed; starting app anyway.");
     }
+}
+else
+{
+    app.Logger.LogInformation("Database migrations are disabled for this deployment.");
 }
 
 // ------------ Liveness & diagnostics endpoints ------------
