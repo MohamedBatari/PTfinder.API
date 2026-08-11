@@ -190,7 +190,9 @@ namespace PTfinder.API.Controllers
                 FullName: coach.FullName,
                 Gender: coach.Gender,
                 Price: coach.Price,
-                Description: coach.Description,
+                // The mobile feed never renders the long coach bio. Excluding it
+                // keeps the first Explore response small and fast on cellular data.
+                Description: null,
                 ProfileImage: profileImage,
                 CategoryName: coach.Category?.Name,
                 SpecialtyName: coach.Speciality?.Name,
