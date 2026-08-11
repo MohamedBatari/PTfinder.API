@@ -36,7 +36,6 @@ namespace PTfinder.API.Controllers
         {
             var normalizedFilter = NormalizeFilter(filter);
             var today = (date ?? DateTime.UtcNow).Date;
-            var nowUtc = DateTime.UtcNow;
             var safeTake = Math.Clamp(take, 12, MaxTake);
 
             var query = _context.Coaches
@@ -50,12 +49,7 @@ namespace PTfinder.API.Controllers
                 .Include(c => c.Availabilities)
                 .Where(c =>
                     c.IsActive &&
-                    c.EmailVerified &&
-                    c.SubscriptionTier > SubscriptionTier.None &&
-                    (
-                        (c.SubscriptionExpiresAtUtc.HasValue && c.SubscriptionExpiresAtUtc > nowUtc) ||
-                        (c.CurrentPeriodEndUtc.HasValue && c.CurrentPeriodEndUtc > nowUtc)
-                    ));
+                    c.EmailVerified);
 
             if (normalizedFilter is "female" or "male")
             {
@@ -72,9 +66,14 @@ namespace PTfinder.API.Controllers
 
             if (normalizedFilter == "featured")
             {
+                var nowUtc = DateTime.UtcNow;
                 query = query.Where(c =>
-                    c.PartnerId != null ||
-                    c.SubscriptionTier == SubscriptionTier.Standard);
+                    (c.PartnerId != null || c.SubscriptionTier == SubscriptionTier.Standard) &&
+                    c.SubscriptionTier > SubscriptionTier.None &&
+                    (
+                        (c.SubscriptionExpiresAtUtc.HasValue && c.SubscriptionExpiresAtUtc > nowUtc) ||
+                        (c.CurrentPeriodEndUtc.HasValue && c.CurrentPeriodEndUtc > nowUtc)
+                    ));
             }
 
             if (normalizedFilter == "availableToday")
@@ -166,9 +165,15 @@ namespace PTfinder.API.Controllers
             var availableToday = coach.Availabilities?
                 .Any(a => a.AvailableDate.Date == today) ?? false;
 
-            var isFeatured =
-                coach.PartnerId != null ||
-                coach.SubscriptionTier == SubscriptionTier.Standard;
+            var nowUtc = DateTime.UtcNow;
+            var hasActiveSubscription =
+                coach.SubscriptionTier > SubscriptionTier.None &&
+                (
+                    (coach.SubscriptionExpiresAtUtc.HasValue && coach.SubscriptionExpiresAtUtc > nowUtc) ||
+                    (coach.CurrentPeriodEndUtc.HasValue && coach.CurrentPeriodEndUtc > nowUtc)
+                );
+            var isFeatured = hasActiveSubscription &&
+                (coach.PartnerId != null || coach.SubscriptionTier == SubscriptionTier.Standard);
 
             var caption = string.Join(" • ", new[]
             {

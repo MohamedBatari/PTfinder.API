@@ -224,8 +224,6 @@ namespace PTfinder.API.Controllers
      [FromQuery] string? Sort = "Newest" // ✅ new
  )
         {
-            var nowUtc = DateTime.UtcNow;
-
             var query = _context.Coaches
                 .Include(c => c.Category)
                 .Include(c => c.Speciality)
@@ -261,15 +259,11 @@ namespace PTfinder.API.Controllers
                 query = query.Where(c => c.FullName.ToLower().Contains(f));
             }
 
-            // 🔥 ONLY active subscriptions
+            // Public discovery is independent from billing. A coach remains visible
+            // after a subscription expires; paid access only gates premium tools.
             query = query.Where(c =>
                 c.IsActive &&
-                c.EmailVerified &&
-                c.SubscriptionTier > 0 &&
-                (
-                    (c.SubscriptionExpiresAtUtc.HasValue && c.SubscriptionExpiresAtUtc > nowUtc) ||
-                    (c.CurrentPeriodEndUtc.HasValue && c.CurrentPeriodEndUtc > nowUtc)
-                )
+                c.EmailVerified
             );
 
             // ✅ Compute reviews/ratings (adjust table name/filters to your schema)
