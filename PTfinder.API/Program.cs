@@ -349,11 +349,9 @@ else
 }
 
 // ------------ SAFE auto-migrate ------------
-var targetMigration = builder.Configuration["DatabaseMigrations:Target"];
 var migrationsEnabled =
     app.Environment.IsDevelopment() ||
-    builder.Configuration.GetValue<bool>("DatabaseMigrations:Enabled") ||
-    !string.IsNullOrWhiteSpace(targetMigration);
+    builder.Configuration.GetValue<bool>("DatabaseMigrations:Enabled");
 
 if (migrationsEnabled)
 {
@@ -362,10 +360,7 @@ if (migrationsEnabled)
     {
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         db.Database.SetCommandTimeout(120);
-        if (string.IsNullOrWhiteSpace(targetMigration))
-            db.Database.Migrate();
-        else
-            db.Database.Migrate(targetMigration);
+        db.Database.Migrate();
         app.Logger.LogInformation("Migrations applied.");
     }
     catch (Exception ex)
