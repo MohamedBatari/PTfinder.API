@@ -127,6 +127,23 @@ namespace PTfinder.API.Services
                 }, ct);
         }
 
+        public async Task NotifyCoachConversationLead(
+            int coachId, int conversationId, string title, CancellationToken ct = default)
+        {
+            var notification = new Notification
+            {
+                RecipientKind = RecipientKind.Coach,
+                CoachId = coachId,
+                Type = "conversation.lead",
+                Title = title,
+                Body = "Open your inbox to view and reply to this client conversation.",
+                Link = $"/dashboard/inbox?conversation={conversationId}",
+                MetadataJson = JsonSerializer.Serialize(new { conversationId })
+            };
+
+            await CreateAsync(notification, ct);
+        }
+
     }
 }
 

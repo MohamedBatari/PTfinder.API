@@ -27,6 +27,8 @@ namespace PTfinder.API.DATA
         public DbSet<Client> Clients { get; set; }
         public DbSet<ClientContactView> ClientContactViews { get; set; }
         public DbSet<CoachProfileView> CoachProfileViews { get; set; }
+        public DbSet<Conversation> Conversations { get; set; } = null!;
+        public DbSet<ConversationMessage> ConversationMessages { get; set; } = null!;
 
 
 
@@ -146,6 +148,35 @@ namespace PTfinder.API.DATA
                     .OnDelete(DeleteBehavior.Restrict);
 
                 entity.HasIndex(x => new { x.ClientId, x.CoachId, x.CreatedAtUtc });
+            });
+
+            modelBuilder.Entity<Conversation>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.HasIndex(x => new { x.CoachId, x.ClientId }).IsUnique();
+                entity.HasIndex(x => new { x.CoachId, x.LastMessageAtUtc });
+                entity.HasIndex(x => new { x.ClientId, x.LastMessageAtUtc });
+
+                entity.HasOne(x => x.Coach)
+                    .WithMany()
+                    .HasForeignKey(x => x.CoachId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(x => x.Client)
+                    .WithMany()
+                    .HasForeignKey(x => x.ClientId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<ConversationMessage>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.Property(x => x.Body).IsRequired().HasMaxLength(2000);
+                entity.HasIndex(x => new { x.ConversationId, x.CreatedAtUtc });
+                entity.HasOne(x => x.Conversation)
+                    .WithMany(x => x.Messages)
+                    .HasForeignKey(x => x.ConversationId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
 
 

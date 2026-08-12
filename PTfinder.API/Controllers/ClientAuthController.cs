@@ -118,6 +118,25 @@ namespace PTfinder.API.Controllers
 
             var token = _jwtService.GenerateToken(client);
 
+            // Native clients cannot reliably consume a browser redirect after
+            // Google Sign-In. They explicitly request JSON and receive the
+            // same secure session while the client record is already saved.
+            if (string.Equals(Request.Query["response"], "json", StringComparison.OrdinalIgnoreCase))
+            {
+                return Ok(new
+                {
+                    token,
+                    client = new
+                    {
+                        client.Id,
+                        client.FullName,
+                        client.Email,
+                        client.PictureUrl,
+                        client.EmailVerified
+                    }
+                });
+            }
+
             var frontendBase =
                 _config["FrontendBase"]?.TrimEnd('/')
                 ?? "https://www.ptfindernow.com";

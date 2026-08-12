@@ -15,6 +15,9 @@ namespace PTfinder.API.Services
         Task NotifyCoachBookingDeclined(
             int coachId, int bookingId, string clientName, string serviceName,
             DateTime startsAtLocal, string timezone, CancellationToken ct = default);
+
+        Task NotifyCoachConversationLead(
+            int coachId, int conversationId, string title, CancellationToken ct = default);
     }
 
 }
