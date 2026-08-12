@@ -294,8 +294,7 @@ namespace PTfinder.API.Services.Emails
         // in the dashboard and the coach should never miss it.
         public static string ConversationLeadCoachHtml(
             string coachName,
-            string clientName,
-            string clientEmail,
+            string clientFirstName,
             string message,
             string inboxUrl,
             string logoUrl)
@@ -305,13 +304,11 @@ namespace PTfinder.API.Services.Emails
 
 <div style=""font-size:13px;line-height:1.7;color:#475569;"">
   Hi {E(coachName)},<br/>
-  <strong>{E(clientName)}</strong> sent you a private message on PTfinderNow.
+  <strong>{E(clientFirstName)}</strong> sent you a private message on PTfinderNow.
 </div>
 
-<table role=""presentation"" width=""100%"" cellpadding=""0"" cellspacing=""0"" style=""border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;margin-top:14px;"">
-  {InfoRow("Client", clientName)}
-  {InfoRow("Email", clientEmail)}
-</table>
+<div style=""margin-top:14px;font-size:12px;color:#64748b;"">Client first name</div>
+<div style=""font-size:16px;font-weight:900;color:#0f172a;margin-top:3px;"">{E(clientFirstName)}</div>
 
 <div style=""margin-top:14px;background:#f8fafc;border-left:4px solid #2563eb;border-radius:10px;padding:12px;font-size:13px;line-height:1.7;color:#334155;"">
   {E(message)}

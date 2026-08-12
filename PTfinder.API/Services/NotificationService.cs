@@ -179,6 +179,21 @@ namespace PTfinder.API.Services
             await CreateAsync(notification, ct);
         }
 
+        public async Task NotifyClientConversationMessage(
+            int clientId, int conversationId, string coachName, CancellationToken ct = default)
+        {
+            await CreateAsync(new Notification
+            {
+                RecipientKind = RecipientKind.Client,
+                ClientId = clientId,
+                Type = "conversation.reply",
+                Title = $"New message from {coachName}",
+                Body = "Open your messages to read the coach's reply.",
+                Link = $"/messages/{conversationId}",
+                MetadataJson = JsonSerializer.Serialize(new { conversationId })
+            }, ct);
+        }
+
     }
 }
 

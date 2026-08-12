@@ -1,11 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using PTfinder.API.DATA;
+using PTfinder.API.DATA.Modules;
 
 namespace PTfinder.API.Services.Emails;
 
 public interface IConversationEmailFlows
 {
-    Task SendNewLeadEmail(int conversationId, CancellationToken ct = default);
+    Task SendNewLeadEmail(int conversationId, int messageId, CancellationToken ct = default);
 }
 
 public sealed class ConversationEmailFlows : IConversationEmailFlows
@@ -24,7 +25,7 @@ public sealed class ConversationEmailFlows : IConversationEmailFlows
     private string WebBaseUrl => _cfg["Web:BaseUrl"] ?? "https://ptfindernow.com";
     private string LogoUrl => _cfg["Branding:LogoUrl"] ?? $"{WebBaseUrl.TrimEnd('/')}/images/PtFinderNow.png";
 
-    public async Task SendNewLeadEmail(int conversationId, CancellationToken ct = default)
+    public async Task SendNewLeadEmail(int conversationId, int messageId, CancellationToken ct = default)
     {
         var conversation = await _db.Conversations
             .AsNoTracking()
@@ -36,28 +37,29 @@ public sealed class ConversationEmailFlows : IConversationEmailFlows
         if (conversation?.Coach == null || string.IsNullOrWhiteSpace(conversation.Coach.Email))
             return;
 
-        var latest = conversation.Messages
-            .Where(x => x.SenderKind == DATA.Modules.ConversationSenderKind.Client)
-            .OrderByDescending(x => x.CreatedAtUtc)
-            .FirstOrDefault();
+        // Use the exact first lead message captured by the controller. This
+        // prevents a later message arriving before Hangfire from changing the
+        // contents of the one-and-only lead email.
+        var firstLeadMessage = conversation.Messages.FirstOrDefault(x =>
+            x.Id == messageId && x.SenderKind == ConversationSenderKind.Client);
+        if (firstLeadMessage == null) return;
 
-        if (latest == null) return;
-
-        var clientName = conversation.Client?.FullName ?? "A new client";
-        var clientEmail = conversation.Client?.Email ?? "Not provided";
+        var fullName = conversation.Client?.FullName?.Trim();
+        var firstName = string.IsNullOrWhiteSpace(fullName)
+            ? "A new client"
+            : fullName.Split(' ', StringSplitOptions.RemoveEmptyEntries)[0];
         var inboxUrl = $"{WebBaseUrl.TrimEnd('/')}/dashboard/inbox?conversation={conversation.Id}";
         var html = EmailTemplates.ConversationLeadCoachHtml(
             conversation.Coach.FullName ?? "Coach",
-            clientName,
-            clientEmail,
-            latest.Body,
+            firstName,
+            firstLeadMessage.Body,
             inboxUrl,
             LogoUrl);
-        var text = $"New client lead\n\n{clientName} ({clientEmail}) sent:\n{latest.Body}\n\nOpen your inbox: {inboxUrl}\n\n— PTfinderNow";
+        var text = $"New client lead\n\n{firstName} sent:\n{firstLeadMessage.Body}\n\nOpen your inbox: {inboxUrl}\n\n- PTfinderNow";
 
         await _sender.SendAsync(
             to: conversation.Coach.Email,
-            subject: $"New client lead from {clientName} — PTfinderNow",
+            subject: $"New client lead from {firstName} - PTfinderNow",
             htmlBody: html,
             textBody: text,
             ct: ct);

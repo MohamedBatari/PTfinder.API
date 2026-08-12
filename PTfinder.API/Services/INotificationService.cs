@@ -30,6 +30,9 @@ namespace PTfinder.API.Services
 
         Task NotifyCoachConversationLead(
             int coachId, int conversationId, string title, CancellationToken ct = default);
+
+        Task NotifyClientConversationMessage(
+            int clientId, int conversationId, string coachName, CancellationToken ct = default);
     }
 
 }

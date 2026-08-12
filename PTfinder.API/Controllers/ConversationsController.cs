@@ -83,11 +83,17 @@ namespace PTfinder.API.Controllers
                 isNew ? "New client lead" : "New client message",
                 ct);
 
-            // Queue email delivery so SMTP latency never blocks the client.
-            // This is deliberately not subscription-gated: every coach must
-            // know that a lead arrived, even when the lead is locked in-app.
-            _jobs.Enqueue<IConversationEmailFlows>(x =>
-                x.SendNewLeadEmail(conversation.Id, CancellationToken.None));
+            // Send one email only for the first message that creates a lead.
+            // Later messages stay inside the app and use phone notifications.
+            if (isNew)
+            {
+                var leadMessageId = conversation.Messages
+                    .OrderByDescending(x => x.Id)
+                    .First(x => x.SenderKind == ConversationSenderKind.Client)
+                    .Id;
+                _jobs.Enqueue<IConversationEmailFlows>(x =>
+                    x.SendNewLeadEmail(conversation.Id, leadMessageId, CancellationToken.None));
+            }
 
             return CreatedAtAction(nameof(GetForClient), new { id = conversation.Id }, new
             {
@@ -248,8 +254,14 @@ namespace PTfinder.API.Controllers
                     "New client message",
                     ct);
 
-                _jobs.Enqueue<IConversationEmailFlows>(x =>
-                    x.SendNewLeadEmail(conversation.Id, CancellationToken.None));
+            }
+            else
+            {
+                await _notifications.NotifyClientConversationMessage(
+                    conversation.ClientId,
+                    conversation.Id,
+                    conversation.Coach.FullName ?? "Your coach",
+                    ct);
             }
 
             var message = conversation.Messages.OrderByDescending(x => x.Id).First();
