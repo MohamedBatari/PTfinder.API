@@ -212,6 +212,7 @@ builder.Services.AddScoped<IPasswordResetEmailJob, PasswordResetEmailJob>();
 
 
 builder.Services.AddScoped<IBookingEmailFlows, BookingEmailFlows>();
+builder.Services.AddScoped<IConversationEmailFlows, ConversationEmailFlows>();
 
 
 

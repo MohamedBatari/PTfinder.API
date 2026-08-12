@@ -79,6 +79,13 @@ namespace PTfinder.API.Controllers
             if (coach == null)
                 return NotFound($"Coach with ID {dto.CoachId} not found.");
 
+            // A signed-in client is linked by email so booking status updates
+            // can also appear in that client's in-app notification center.
+            var client = string.IsNullOrWhiteSpace(dto.StudentEmail)
+                ? null
+                : await _context.Clients.FirstOrDefaultAsync(
+                    x => x.Email == dto.StudentEmail, ct);
+
             var booking = new Booking
             {
                 CoachId = dto.CoachId,
@@ -103,6 +110,18 @@ namespace PTfinder.API.Controllers
                 timezone: "Asia/Dubai",
                 ct: ct
             );
+
+            if (client != null)
+            {
+                await _notifications.NotifyClientBookingRequest(
+                    client.Id,
+                    booking.Id,
+                    coach.FullName ?? "your coach",
+                    "session",
+                    booking.BookingDate,
+                    "Asia/Dubai",
+                    ct);
+            }
 
             // ✅ Emails moved to background (fast API response)
             _jobs.Enqueue<IBookingEmailFlows>(x =>
@@ -182,6 +201,10 @@ namespace PTfinder.API.Controllers
 
             if (statusDto.Status == BookingStatus.Accepted)
             {
+                var client = string.IsNullOrWhiteSpace(booking.StudentEmail)
+                    ? null
+                    : await _context.Clients.FirstOrDefaultAsync(
+                        x => x.Email == booking.StudentEmail, ct);
                 // ----------------
                 // Reminders (24h / 2h before)
                 // ----------------
@@ -242,6 +265,18 @@ namespace PTfinder.API.Controllers
                     ct: ct
                 );
 
+                if (client != null)
+                {
+                    await _notifications.NotifyClientBookingConfirmed(
+                        client.Id,
+                        booking.Id,
+                        booking.Coach.FullName ?? "Your coach",
+                        "session",
+                        booking.BookingDate,
+                        "Asia/Dubai",
+                        ct);
+                }
+
                 // ✅ Student email in background
                 _jobs.Enqueue<IBookingEmailFlows>(x =>
                     x.SendBookingAcceptedEmail(booking.Id, CancellationToken.None)
@@ -249,6 +284,10 @@ namespace PTfinder.API.Controllers
             }
             else if (statusDto.Status == BookingStatus.Cancelled)
             {
+                var client = string.IsNullOrWhiteSpace(booking.StudentEmail)
+                    ? null
+                    : await _context.Clients.FirstOrDefaultAsync(
+                        x => x.Email == booking.StudentEmail, ct);
                 // ✅ Notification → Coach
                 await _notifications.NotifyCoachBookingDeclined(
                     coachId: booking.CoachId,
@@ -259,6 +298,18 @@ namespace PTfinder.API.Controllers
                     timezone: "Asia/Dubai",
                     ct: ct
                 );
+
+                if (client != null)
+                {
+                    await _notifications.NotifyClientBookingDeclined(
+                        client.Id,
+                        booking.Id,
+                        booking.Coach.FullName ?? "Your coach",
+                        "session",
+                        booking.BookingDate,
+                        "Asia/Dubai",
+                        ct);
+                }
 
                 // ✅ Student email in background
                 _jobs.Enqueue<IBookingEmailFlows>(x =>

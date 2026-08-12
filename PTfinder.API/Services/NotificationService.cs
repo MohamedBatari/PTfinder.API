@@ -74,25 +74,17 @@ namespace PTfinder.API.Services
 
             var n = new Notification
             {
+                RecipientKind = RecipientKind.Coach,
                 CoachId = coachId,
+                Type = "booking.confirmed",
                 Title = title,
                 Body = body,
                 Link = link,
                 CreatedAtUtc = DateTime.UtcNow,
-                IsRead = false
+                IsRead = false,
+                MetadataJson = JsonSerializer.Serialize(new { bookingId })
             };
-            _db.Notifications.Add(n);
-            await _db.SaveChangesAsync(ct);
-
-            await _hub.Clients.Group($"coach-{coachId}")
-                .SendAsync("notification", new
-                {
-                    id = n.Id,
-                    title = n.Title,
-                    body = n.Body,
-                    link = n.Link,
-                    createdAtUtc = n.CreatedAtUtc
-                }, ct);
+            await CreateAsync(n, ct);
         }
 
         public async Task NotifyCoachBookingDeclined(
@@ -106,25 +98,68 @@ namespace PTfinder.API.Services
 
             var n = new Notification
             {
+                RecipientKind = RecipientKind.Coach,
                 CoachId = coachId,
+                Type = "booking.declined",
                 Title = title,
                 Body = body,
                 Link = link,
                 CreatedAtUtc = DateTime.UtcNow,
-                IsRead = false
+                IsRead = false,
+                MetadataJson = JsonSerializer.Serialize(new { bookingId })
             };
-            _db.Notifications.Add(n);
-            await _db.SaveChangesAsync(ct);
+            await CreateAsync(n, ct);
+        }
 
-            await _hub.Clients.Group($"coach-{coachId}")
-                .SendAsync("notification", new
-                {
-                    id = n.Id,
-                    title = n.Title,
-                    body = n.Body,
-                    link = n.Link,
-                    createdAtUtc = n.CreatedAtUtc
-                }, ct);
+        public async Task NotifyClientBookingRequest(
+            int clientId, int bookingId, string coachName, string serviceName,
+            DateTime startsAtLocal, string timezone, CancellationToken ct = default)
+        {
+            var when = $"{startsAtLocal:yyyy-MM-dd HH:mm} ({timezone})";
+            await CreateAsync(new Notification
+            {
+                RecipientKind = RecipientKind.Client,
+                ClientId = clientId,
+                Type = "booking.request.sent",
+                Title = "Booking request sent",
+                Body = $"Your {serviceName} request to {coachName} is waiting for confirmation — {when}.",
+                Link = $"/bookings/{bookingId}",
+                MetadataJson = JsonSerializer.Serialize(new { bookingId })
+            }, ct);
+        }
+
+        public async Task NotifyClientBookingConfirmed(
+            int clientId, int bookingId, string coachName, string serviceName,
+            DateTime startsAtLocal, string timezone, CancellationToken ct = default)
+        {
+            var when = $"{startsAtLocal:yyyy-MM-dd HH:mm} ({timezone})";
+            await CreateAsync(new Notification
+            {
+                RecipientKind = RecipientKind.Client,
+                ClientId = clientId,
+                Type = "booking.confirmed",
+                Title = "Booking confirmed",
+                Body = $"{coachName} confirmed your {serviceName} — {when}.",
+                Link = $"/bookings/{bookingId}",
+                MetadataJson = JsonSerializer.Serialize(new { bookingId })
+            }, ct);
+        }
+
+        public async Task NotifyClientBookingDeclined(
+            int clientId, int bookingId, string coachName, string serviceName,
+            DateTime startsAtLocal, string timezone, CancellationToken ct = default)
+        {
+            var when = $"{startsAtLocal:yyyy-MM-dd HH:mm} ({timezone})";
+            await CreateAsync(new Notification
+            {
+                RecipientKind = RecipientKind.Client,
+                ClientId = clientId,
+                Type = "booking.declined",
+                Title = "Booking update",
+                Body = $"{coachName} could not confirm your {serviceName} request — {when}.",
+                Link = $"/bookings/{bookingId}",
+                MetadataJson = JsonSerializer.Serialize(new { bookingId })
+            }, ct);
         }
 
         public async Task NotifyCoachConversationLead(

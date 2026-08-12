@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Hangfire;
 using PTfinder.API.DATA;
 using PTfinder.API.DATA.Modules;
 using PTfinder.API.DTO.Conversations;
 using PTfinder.API.Services;
+using PTfinder.API.Services.Emails;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 
@@ -17,11 +19,16 @@ namespace PTfinder.API.Controllers
     {
         private readonly AppDbContext _db;
         private readonly INotificationService _notifications;
+        private readonly IBackgroundJobClient _jobs;
 
-        public ConversationsController(AppDbContext db, INotificationService notifications)
+        public ConversationsController(
+            AppDbContext db,
+            INotificationService notifications,
+            IBackgroundJobClient jobs)
         {
             _db = db;
             _notifications = notifications;
+            _jobs = jobs;
         }
 
         // A client starts one private conversation with an active coach.
@@ -75,6 +82,12 @@ namespace PTfinder.API.Controllers
                 conversation.Id,
                 isNew ? "New client lead" : "New client message",
                 ct);
+
+            // Queue email delivery so SMTP latency never blocks the client.
+            // This is deliberately not subscription-gated: every coach must
+            // know that a lead arrived, even when the lead is locked in-app.
+            _jobs.Enqueue<IConversationEmailFlows>(x =>
+                x.SendNewLeadEmail(conversation.Id, CancellationToken.None));
 
             return CreatedAtAction(nameof(GetForClient), new { id = conversation.Id }, new
             {
@@ -234,6 +247,9 @@ namespace PTfinder.API.Controllers
                     conversation.Id,
                     "New client message",
                     ct);
+
+                _jobs.Enqueue<IConversationEmailFlows>(x =>
+                    x.SendNewLeadEmail(conversation.Id, CancellationToken.None));
             }
 
             var message = conversation.Messages.OrderByDescending(x => x.Id).First();
