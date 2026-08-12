@@ -360,7 +360,11 @@ if (migrationsEnabled)
     {
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         db.Database.SetCommandTimeout(120);
-        db.Database.Migrate();
+        var targetMigration = builder.Configuration["DatabaseMigrations:Target"];
+        if (string.IsNullOrWhiteSpace(targetMigration))
+            db.Database.Migrate();
+        else
+            db.Database.Migrate(targetMigration);
         app.Logger.LogInformation("Migrations applied.");
     }
     catch (Exception ex)
