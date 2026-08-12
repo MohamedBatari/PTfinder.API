@@ -30,6 +30,17 @@ jobs:
       - name: Build
         run: dotnet build ./PTfinder.API/PTfinder.API.csproj -c Release --no-restore
 
+      # One-time additive schema migration approved for the private chat tables.
+      # This is removed immediately after the migration run succeeds.
+      - name: Apply private conversation migration
+        run: |
+          dotnet tool install --global dotnet-ef --version 9.0.8
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+          dotnet ef database update 20260811231602_AddPrivateConversations \
+            --project ./PTfinder.API/PTfinder.API.csproj \
+            --configuration Release \
+            --connection "${{ secrets.AZURE_SQL_CONNECTIONSTRING }}"
+
       - name: Publish
         run: dotnet publish ./PTfinder.API/PTfinder.API.csproj -c Release -o ./publish --no-restore
 
