@@ -12,11 +12,19 @@ namespace PTfinder.API.Services
     {
         private readonly AppDbContext _db;
         private readonly IHubContext<NotifyHub> _hub;
+        private readonly IPushNotificationSender _push;
+        private readonly ILogger<NotificationService> _logger;
 
-        public NotificationService(AppDbContext db, IHubContext<NotifyHub> hub)
+        public NotificationService(
+            AppDbContext db,
+            IHubContext<NotifyHub> hub,
+            IPushNotificationSender push,
+            ILogger<NotificationService> logger)
         {
             _db = db;
             _hub = hub;
+            _push = push;
+            _logger = logger;
         }
 
         public async Task<Notification> CreateAsync(Notification n, CancellationToken ct = default)
@@ -40,7 +48,56 @@ namespace PTfinder.API.Services
             else if (n.RecipientKind == RecipientKind.Client && n.ClientId.HasValue)
                 await _hub.Clients.Group($"client:{n.ClientId.Value}").SendAsync("notify", payload, ct);
 
+            await SendBackgroundPushAsync(n, ct);
+
             return n;
+        }
+
+        private async Task SendBackgroundPushAsync(Notification n, CancellationToken ct)
+        {
+            try
+            {
+                var tokens = await _db.PushDevices
+                    .AsNoTracking()
+                    .Where(x => x.IsActive &&
+                        ((n.RecipientKind == RecipientKind.Coach && n.CoachId.HasValue && x.CoachId == n.CoachId.Value) ||
+                         (n.RecipientKind == RecipientKind.Client && n.ClientId.HasValue && x.ClientId == n.ClientId.Value)))
+                    .Select(x => x.Token)
+                    .ToListAsync(ct);
+
+                if (tokens.Count == 0) return;
+
+                var data = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["notificationId"] = n.Id.ToString(),
+                    ["type"] = n.Type,
+                    ["link"] = n.Link ?? string.Empty
+                };
+                if (!string.IsNullOrWhiteSpace(n.MetadataJson))
+                {
+                    try
+                    {
+                        using var document = JsonDocument.Parse(n.MetadataJson);
+                        foreach (var property in document.RootElement.EnumerateObject())
+                        {
+                            if (property.Value.ValueKind is JsonValueKind.String or JsonValueKind.Number)
+                                data[property.Name] = property.Value.ToString();
+                        }
+                    }
+                    catch (JsonException) { }
+                }
+
+                var channel = n.Type.StartsWith("conversation.", StringComparison.OrdinalIgnoreCase)
+                    ? "messages"
+                    : "bookings";
+                await _push.SendAsync(tokens, n.Title, n.Body, data, channel, ct);
+            }
+            catch (Exception ex) when (ex is DbUpdateException or InvalidOperationException or Microsoft.Data.SqlClient.SqlException)
+            {
+                // Push delivery is best-effort. Never fail a booking/message
+                // because a token table or external gateway is unavailable.
+                _logger.LogWarning(ex, "Background push could not be sent for notification {NotificationId}.", n.Id);
+            }
         }
 
         public async Task NotifyCoachBookingRequest(

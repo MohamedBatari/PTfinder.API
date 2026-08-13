@@ -29,6 +29,7 @@ Env.Load();
 // ------------ SignalR & notifications ------------
 builder.Services.AddSignalR();
 builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddHttpClient<IPushNotificationSender, ExpoPushNotificationSender>();
 
 // ------------ Connection string (fail fast if missing) ------------
 var cs = builder.Configuration.GetConnectionString("mycon")
@@ -372,6 +373,15 @@ if (migrationsEnabled)
 else
 {
     app.Logger.LogInformation("Database migrations are disabled for this deployment.");
+}
+
+// PushDevices is an additive table and is ensured independently of the
+// existing migration switch, so enabling push cannot alter existing data.
+using (var pushScope = app.Services.CreateScope())
+{
+    var pushDb = pushScope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var pushLogger = pushScope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("PushDeviceSchema");
+    await PushDeviceSchema.EnsureAsync(pushDb, pushLogger);
 }
 
 // ------------ Liveness & diagnostics endpoints ------------

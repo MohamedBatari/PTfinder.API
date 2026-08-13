@@ -29,6 +29,7 @@ namespace PTfinder.API.DATA
         public DbSet<CoachProfileView> CoachProfileViews { get; set; }
         public DbSet<Conversation> Conversations { get; set; } = null!;
         public DbSet<ConversationMessage> ConversationMessages { get; set; } = null!;
+        public DbSet<PushDevice> PushDevices { get; set; } = null!;
 
 
 
@@ -187,6 +188,19 @@ namespace PTfinder.API.DATA
                 e.Property(x => x.Body).HasMaxLength(2000).IsRequired();
                 e.Property(x => x.Link).HasMaxLength(512);
                 e.Property(x => x.CreatedAtUtc).HasDefaultValueSql("GETUTCDATE()");
+            });
+
+            modelBuilder.Entity<PushDevice>(e =>
+            {
+                e.HasKey(x => x.Id);
+                e.Property(x => x.Token).HasMaxLength(512).IsRequired();
+                e.Property(x => x.Provider).HasMaxLength(40).IsRequired();
+                e.Property(x => x.Platform).HasMaxLength(20).IsRequired();
+                e.Property(x => x.CreatedAtUtc).HasDefaultValueSql("GETUTCDATE()");
+                e.Property(x => x.LastSeenAtUtc).HasDefaultValueSql("GETUTCDATE()");
+                e.HasIndex(x => x.Token).IsUnique();
+                e.HasIndex(x => new { x.CoachId, x.IsActive });
+                e.HasIndex(x => new { x.ClientId, x.IsActive });
             });
             // Gifts
             modelBuilder.Entity<CoachGift>(e =>
